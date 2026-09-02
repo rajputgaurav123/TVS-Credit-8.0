@@ -59,16 +59,3 @@ score. It's trained only on disbursed loans since that's the only population wit
 outcomes — a population-stability check on the score distribution between trained and scored
 populations came back low (PSI 0.047), which is reassuring on covariate shift.
 
-## How to reproduce
-
-**On Colab:** see "Running on Google Colab" above — no install step needed.
-
-**Locally:**
-```bash
-pip install -r requirements.txt
-jupyter nbconvert --to notebook --execute --inplace EPIC8_01_Analysis_EDA.ipynb
-jupyter nbconvert --to notebook --execute --inplace EPIC8_02_Model_Offer_Logic.ipynb
-```
-
-Keep `EPIC8_Dataset.xlsx` in the same folder for the local fallback path to work. The dashboard
-(`EPIC8_Offer_Logic_Dashboard.html`) needs no build step — just open it in a browser.
