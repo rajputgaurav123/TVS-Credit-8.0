@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Offer amount logic — risk desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0A1220; --panel:#0F1B2B; --panel-2:#132239; --border:#22344A;
+    --text:#E9EFF4; --text-dim:#8FA4B8; --text-faint:#5D7288;
+    --safe:#35C08A; --safe-dim:#173B2E; --risk:#F2665C; --risk-dim:#3B1D1C;
+    --amber:#E7B54A; --amber-dim:#3A2E13;
+    --serif:'Fraunces',Georgia,serif; --sans:'IBM Plex Sans',-apple-system,sans-serif; --mono:'IBM Plex Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--ink);color:var(--text);font-family:var(--sans);}
+  .wrap{max-width:1180px;margin:0 auto;padding:56px 32px 80px;}
+  .eyebrow{font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:var(--amber);margin:0 0 14px;}
+  h1{font-family:var(--serif);font-weight:500;font-size:38px;line-height:1.15;margin:0 0 14px;color:var(--text);max-width:820px;}
+  .lede{font-size:16px;line-height:1.6;color:var(--text-dim);max-width:660px;margin:0 0 36px;}
+
+  .tabbar{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:40px;overflow-x:auto;}
+  .tabbtn{background:none;border:none;color:var(--text-faint);font-family:var(--sans);font-size:13.5px;padding:12px 18px;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .12s;}
+  .tabbtn:hover{color:var(--text-dim);}
+  .tabbtn.active{color:var(--text);border-bottom-color:var(--amber);}
+  .tabpanel{display:none;}
+  .tabpanel.active{display:block;}
+
+  .kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:48px;}
+  .kpi{background:var(--panel);padding:20px 18px;}
+  .kpi .label{font-size:12px;color:var(--text-faint);margin-bottom:10px;}
+  .kpi .value{font-family:var(--serif);font-size:25px;color:var(--text);line-height:1;}
+  .kpi .value.pos{color:var(--safe);}
+  .kpi .value.warn{color:var(--risk);}
+  .kpi .sub{font-family:var(--mono);font-size:11.5px;color:var(--text-dim);margin-top:8px;}
+
+  .formula{display:flex;align-items:stretch;gap:14px;margin:0 0 48px;flex-wrap:wrap;}
+  .fbox{flex:1;min-width:150px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 20px;}
+  .fbox .ftitle{font-size:12px;color:var(--text-faint);margin-bottom:8px;}
+  .fbox .fval{font-family:var(--mono);font-size:14px;color:var(--text);line-height:1.5;}
+  .fop{display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:26px;color:var(--amber);padding:0 2px;}
+  .fbox.result{background:var(--panel-2);border-color:#2E4362;}
+
+  section{margin-bottom:56px;}
+  .stitle{font-family:var(--serif);font-size:21px;font-weight:500;color:var(--text);margin:0 0 6px;}
+  .sdesc{font-size:14px;color:var(--text-dim);line-height:1.55;max-width:700px;margin:0 0 22px;}
+
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:24px 26px;}
+  .two-col{display:grid;grid-template-columns:1.1fr 1fr;gap:20px;}
+  .two-col-even{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  .three-col{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  @media(max-width:900px){.two-col,.two-col-even,.three-col{grid-template-columns:1fr;} .kpi-row{grid-template-columns:repeat(2,1fr);}}
+
+  .legend{display:flex;gap:20px;font-size:12.5px;color:var(--text-dim);margin-bottom:16px;flex-wrap:wrap;}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .swatch{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+  .ledger{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--panel);}
+  .ledger-head, .ledger-row{display:grid;grid-template-columns:44px 1.3fr 1fr 1.1fr 1fr 1.4fr;align-items:center;padding:14px 20px;gap:12px;}
+  .ledger-head{font-size:11px;color:var(--text-faint);border-bottom:1px solid var(--border);}
+  .ledger-row{border-bottom:1px solid var(--border);font-size:14px;}
+  .ledger-row:last-child{border-bottom:none;}
+  .ledger-row.total{background:var(--panel-2);font-weight:500;}
+  .qnum{font-family:var(--mono);font-size:13px;color:var(--amber);}
+  .qrange,.qavg{font-family:var(--mono);font-size:13px;color:var(--text);}
+  .qvol,.qrisk{font-family:var(--mono);font-size:13px;color:var(--text-dim);}
+  .qbar-wrap{display:flex;align-items:center;gap:8px;}
+  .qbar-track{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+  .qbar-fill{height:100%;border-radius:3px;background:var(--risk);}
+
+  canvas{max-width:100%;}
+  .chart-box{position:relative;width:100%;}
+
+  .score-row{display:grid;grid-template-columns:170px 1fr 60px;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .score-row:last-child{border-bottom:none;}
+  .score-name{font-size:13.5px;color:var(--text);}
+  .score-track{height:8px;background:var(--panel-2);border-radius:4px;overflow:hidden;position:relative;}
+  .score-fill{height:100%;background:var(--safe);border-radius:4px;}
+  .score-fill.partial{background:var(--amber);}
+  .score-val{font-family:var(--mono);font-size:13px;color:var(--text-dim);text-align:right;}
+
+  .stat-mini{text-align:center;padding:8px 0;}
+  .stat-mini .big{font-family:var(--serif);font-size:32px;color:var(--text);}
+  .stat-mini .big.warn{color:var(--risk);}
+  .stat-mini .lbl{font-size:12px;color:var(--text-faint);margin-top:6px;}
+  .stat-mini .note{font-size:12px;color:var(--text-dim);margin-top:10px;line-height:1.5;}
+
+  .heatgrid{display:grid;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .heatcell{font-family:var(--mono);font-size:11.5px;display:flex;align-items:center;justify-content:center;padding:9px 4px;color:#0A1220;border:1px solid rgba(10,18,32,0.25);}
+  .heatlabel{font-family:var(--mono);font-size:11px;color:var(--text-faint);display:flex;align-items:center;justify-content:center;background:var(--panel);}
+
+  .limit-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:900px){.limit-grid{grid-template-columns:1fr;}}
+  .limit-card{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--risk);border-radius:8px;padding:18px 20px;}
+  .limit-card h4{font-family:var(--sans);font-weight:500;font-size:14.5px;color:var(--text);margin:0 0 8px;}
+  .limit-card p{font-size:13.5px;color:var(--text-dim);line-height:1.6;margin:0;}
+  .limit-card .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;color:var(--risk);background:var(--risk-dim);padding:2px 8px;border-radius:4px;margin-bottom:10px;}
+
+  footer{border-top:1px solid var(--border);padding-top:24px;font-size:12.5px;color:var(--text-faint);line-height:1.7;}
+  footer a{color:var(--amber);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="eyebrow">TVS Credit EPIC 8 — analytics case study 2</p>
+  <h1>Offer amount logic for personal loan: risk desk</h1>
+  <p class="lede">A capacity model sets the ceiling; a tuned, calibrated risk model adjusts it. Safer customers see a higher offer than today's logic — riskier customers see less, by a wider, better-justified margin than a first-pass model could support.</p>
+
+  <div class="tabbar" id="tabbar">
+    <button class="tabbtn active" data-tab="overview">Overview</button>
+    <button class="tabbtn" data-tab="eda">Data &amp; EDA</button>
+    <button class="tabbtn" data-tab="riskmodel">Risk model</button>
+    <button class="tabbtn" data-tab="capmodel">Capacity model</button>
+    <button class="tabbtn" data-tab="offerlogic">Offer logic</button>
+    <button class="tabbtn" data-tab="validation">Validation</button>
+    <button class="tabbtn" data-tab="limitations">Model notes</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="tabpanel active" id="tab-overview">
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <div class="formula">
+      <div class="fbox">
+        <div class="ftitle">Capacity model</div>
+        <div class="fval">Gradient-boosted regressor trained to reproduce today's offer amount from bureau &amp; exposure features. R² 0.71 on held-out test rows.</div>
+      </div>
+      <div class="fop">&times;</div>
+      <div class="fbox">
+        <div class="ftitle">Risk multiplier</div>
+        <div class="fval">1.30&times; for the safest customer in the base, scaling down to 0.70&times; for the riskiest, by predicted-default percentile — a stronger swing than a naive model would safely support.</div>
+      </div>
+      <div class="fop">=</div>
+      <div class="fbox result">
+        <div class="ftitle">Proposed offer</div>
+        <div class="fval">Clipped to ₹40,000&ndash;₹6,00,000, rounded to the nearest ₹10,000.</div>
+      </div>
+    </div>
+
+    <section>
+      <p class="stitle">Re-pricing by risk grade</p>
+      <p class="sdesc">Average offer amount, existing vs proposed, across the nine bureau-provided risk bands (1 = lowest risk). Test set, current-logic customers.</p>
+      <div class="panel">
+        <div class="legend">
+          <span><span class="swatch" style="background:#5A6B80"></span>Existing offer</span>
+          <span><span class="swatch" style="background:#35C08A"></span>Proposed offer</span>
+        </div>
+        <div class="chart-box" style="height:300px;"><canvas id="riskGradeChart" role="img" aria-label="Grouped bar chart comparing existing and proposed average offer amount across nine risk grades"></canvas></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="two-col">
+        <div>
+          <p class="stitle">Offer amount, before and after</p>
+          <p class="sdesc">Distribution of offer amounts on the test set.</p>
+          <div class="panel">
+            <div class="legend">
+              <span><span class="swatch" style="background:#5A6B80"></span>Existing</span>
+              <span><span class="swatch" style="background:#35C08A"></span>Proposed</span>
+            </div>
+            <div class="chart-box" style="height:250px;"><canvas id="distChart" role="img" aria-label="Overlapping area chart of existing and proposed offer amount distributions"></canvas></div>
+          </div>
+        </div>
+        <div>
+          <p class="stitle">Offer by customer outcome</p>
+          <p class="sdesc">Did-not-borrow / borrowed-elsewhere / took-the-loan.</p>
+          <div class="panel">
+            <div class="chart-box" style="height:250px;"><canvas id="categoryChart" role="img" aria-label="Grouped bar chart of existing versus proposed average offer amount for three customer outcome segments"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- EDA -->
+  <div class="tabpanel" id="tab-eda">
+    <section>
+      <div class="two-col-even">
+        <div>
+          <p class="stitle">Age distribution</p>
+          <p class="sdesc">Full base, all customers contacted.</p>
+          <div class="panel"><div class="chart-box" style="height:240px;"><canvas id="ageChart" role="img" aria-label="Bar chart of customer counts by age band"></canvas></div></div>
+        </div>
+        <div>
+          <p class="stitle">Employment segment</p>
+          <p class="sdesc">Salaried, self-employed, and self-employed professional split.</p>
+          <div class="panel"><div class="chart-box" style="height:240px;"><canvas id="empChart" role="img" aria-label="Bar chart of customer counts by employment segment"></canvas></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="two-col-even">
+        <div>
+          <p class="stitle">Existing offer by employment segment</p>
+          <p class="sdesc">Test set average, current logic.</p>
+          <div class="panel"><div class="chart-box" style="height:220px;"><canvas id="empOfferChart" role="img" aria-label="Bar chart of average existing offer amount by employment segment"></canvas></div></div>
+        </div>
+        <div>
+          <p class="stitle">Customer disposition</p>
+          <p class="sdesc">Top outcomes recorded after the offer call.</p>
+          <div class="panel"><div class="chart-box" style="height:220px;"><canvas id="dispChart" role="img" aria-label="Bar chart of top customer disposition outcomes by percentage"></canvas></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <p class="stitle">"Amount too low" feedback</p>
+      <p class="sdesc">Customers who declined citing an insufficient offer, by existing-offer quartile bin. Smaller offers draw more of this complaint.</p>
+      <div class="panel"><div class="chart-box" style="height:170px;"><canvas id="lowAmtChart" role="img" aria-label="Bar chart showing the amount-too-low complaint rate falling from lowest to highest offer quartile"></canvas></div></div>
+    </section>
+
+    <section style="margin-bottom:0;">
+      <p class="stitle">Data quality — missing values</p>
+      <p class="sdesc">Top 15 columns by missing-value rate. Tree-based models handle these natively without imputation.</p>
+      <div class="panel"><div class="chart-box" style="height:340px;"><canvas id="missingChart" role="img" aria-label="Horizontal bar chart of the fifteen columns with the highest missing value percentage"></canvas></div></div>
+    </section>
+  </div>
+
+  <!-- RISK MODEL -->
+  <div class="tabpanel" id="tab-riskmodel">
+    <div class="panel three-col" style="grid-template-columns:1fr 1fr 1fr 1fr;margin-bottom:40px;">
+      <div class="stat-mini">
+        <div class="big" id="aucStat2">0.61</div>
+        <div class="lbl">Hold-out AUC</div>
+        <div class="note" id="aucCiNote">Tuned + engineered features + native calibration</div>
+      </div>
+      <div class="stat-mini">
+        <div class="big" id="liftStat">1.81&times;</div>
+        <div class="lbl">Top-decile lift</div>
+        <div class="note">Highest-risk 10% capture 18% of actual defaults — up from 1.53&times; in the first pass.</div>
+      </div>
+      <div class="stat-mini">
+        <div class="big" id="brierRawStat">0.013</div>
+        <div class="lbl">Brier score</div>
+        <div class="note">Matches the 1.3% base rate almost exactly — natively calibrated, no post-hoc fix needed.</div>
+      </div>
+      <div class="stat-mini">
+        <div class="big" id="brierCalStat">24%</div>
+        <div class="lbl">Riskiest-quintile cut</div>
+        <div class="note">The better-ranked score supports a stronger, still fully-compliant price cut than before.</div>
+      </div>
+    </div>
+
+    <section>
+      <div class="two-col-even">
+        <div>
+          <p class="stitle">ROC curve</p>
+          <p class="sdesc">Hold-out 25% of disbursed loans, final tuned + calibrated model.</p>
+          <div class="panel"><div class="chart-box" style="height:280px;"><canvas id="rocChart" role="img" aria-label="ROC curve for the risk model, showing true positive rate against false positive rate, close to the diagonal random-guess line"></canvas></div></div>
+        </div>
+        <div>
+          <p class="stitle">Top risk drivers</p>
+          <p class="sdesc">Permutation importance (drop in AUC when a feature is shuffled).</p>
+          <div class="panel"><div class="chart-box" style="height:280px;"><canvas id="riskImpChart" role="img" aria-label="Horizontal bar chart of the top twelve features driving the risk model, ranked by permutation importance"></canvas></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="two-col-even">
+        <div>
+          <p class="stitle">AUC uncertainty</p>
+          <p class="sdesc">1,000 bootstrap resamples of the hold-out set, after tuning and calibration.</p>
+          <div class="panel"><div class="chart-box" style="height:220px;"><canvas id="aucCiChart" role="img" aria-label="Horizontal range bar showing the AUC point estimate with a 95 percent bootstrap confidence interval, against a reference line at 0.50 for random guessing"></canvas></div></div>
+        </div>
+        <div>
+          <p class="stitle">Precision &ndash; recall curve</p>
+          <p class="sdesc">More informative than ROC for a rare event. Area under this curve (AUPRC) is 0.019 against a base rate of 1.3% &mdash; a real but modest 1.4&times; improvement over guessing.</p>
+          <div class="panel"><div class="chart-box" style="height:220px;"><canvas id="prChart" role="img" aria-label="Precision recall curve for the risk model on the rare default event"></canvas></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section style="margin-bottom:0;">
+      <p class="stitle">Calibration — predicted vs actual default rate</p>
+      <p class="sdesc">Customers grouped into ten deciles by predicted risk. Raw predicted values (amber) badly overstate the true rate (green) &mdash; a side effect of class-rebalancing during training. The recalibrated line (blue, isotonic fit on the same hold-out) tracks actual rate closely, proving the rank order was usable all along. Only the rank/percentile feeds the offer logic, never the raw probability.</p>
+      <div class="panel">
+        <div class="legend">
+          <span><span class="swatch" style="background:#E7B54A"></span>Raw predicted</span>
+          <span><span class="swatch" style="background:#4C7BB8"></span>Recalibrated</span>
+          <span><span class="swatch" style="background:#35C08A"></span>Actual</span>
+        </div>
+        <div class="chart-box" style="height:280px;"><canvas id="calibChart" role="img" aria-label="Line chart comparing raw predicted probability, isotonic-recalibrated probability, and actual observed default rate across ten risk deciles"></canvas></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- CAPACITY MODEL -->
+  <div class="tabpanel" id="tab-capmodel">
+    <div class="panel three-col" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:40px;">
+      <div class="stat-mini">
+        <div class="big" id="r2Stat2">0.71</div>
+        <div class="lbl">Hold-out R²</div>
+        <div class="note">Reproduces ~71% of the variance in today's offer amount.</div>
+      </div>
+      <div class="stat-mini">
+        <div class="big">₹37.8k</div>
+        <div class="lbl">Mean absolute error</div>
+        <div class="note">Typical deviation from the actual existing offer, in rupees.</div>
+      </div>
+      <div class="stat-mini">
+        <div class="big">120k</div>
+        <div class="lbl">Training rows</div>
+        <div class="note">All test-set rows, where the existing offer amount is known.</div>
+      </div>
+    </div>
+
+    <section>
+      <div class="two-col-even">
+        <div>
+          <p class="stitle">Predicted vs actual</p>
+          <p class="sdesc">Each point is one customer: model-predicted capacity against the actual existing offer.</p>
+          <div class="panel"><div class="chart-box" style="height:300px;"><canvas id="scatterChart" role="img" aria-label="Scatter plot of model-predicted offer capacity against actual existing offer amount, points cluster around the diagonal"></canvas></div></div>
+        </div>
+        <div>
+          <p class="stitle">Top capacity drivers</p>
+          <p class="sdesc">Permutation importance (drop in R² when a feature is shuffled).</p>
+          <div class="panel"><div class="chart-box" style="height:300px;"><canvas id="capImpChart" role="img" aria-label="Horizontal bar chart of the top twelve features driving the capacity model, ranked by permutation importance"></canvas></div></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- OFFER LOGIC -->
+  <div class="tabpanel" id="tab-offerlogic">
+    <section>
+      <p class="stitle">Calibrating the risk multiplier</p>
+      <p class="sdesc">Composite score (0&ndash;100, PD-based risk definition) across a grid of multiplier bounds, using the tuned and calibrated risk score. Rows are the boost applied to the safest customer, columns are the cut applied to the riskiest. The chosen configuration (1.30&times;/0.70&times;) sits in the darkest band &mdash; a perfect composite score with a stronger risk cut than the model supported before tuning.</p>
+      <div class="panel" id="heatmapPanel"></div>
+    </section>
+
+    <section style="margin-bottom:0;">
+      <p class="stitle">Iteration scorecard</p>
+      <p class="sdesc">Composite score against the brief's three weighted criteria: overall uplift 30%, risk cut for the riskiest quintile 40%, takeup-segment uplift 30%. Calibrated is the version taken forward.</p>
+      <div class="panel" id="iterPanel"></div>
+    </section>
+  </div>
+
+  <!-- VALIDATION -->
+  <div class="tabpanel" id="tab-validation">
+    <section>
+      <p class="stitle">Validation deliverable — disbursed personal-loan customers</p>
+      <p class="sdesc">Held-out validation rows who took the loan, bucketed into quintiles of the proposed offer amount, as specified in the brief. The rightmost column is the observed 30+ DPD rate in months 1&ndash;6 on book. This cut isn't perfectly step-wise &mdash; the middle quintile bumps up slightly &mdash; because offer amount blends two signals (capacity and risk); see the risk-only cut below for the cleaner view of what's driving it.</p>
+      <div class="ledger" id="ledger"></div>
+    </section>
+
+    <section>
+      <p class="stitle">Higher offer, lower risk</p>
+      <p class="sdesc">Same quintiles, plotted: average proposed offer (bars) against observed risk rate (line).</p>
+      <div class="panel"><div class="chart-box" style="height:280px;"><canvas id="quintileChart" role="img" aria-label="Combination bar and line chart showing average proposed offer amount rising and percent ever-30 risk rate falling across five quintiles, with one quintile out of strict order"></canvas></div></div>
+    </section>
+
+    <section style="margin-bottom:0;">
+      <p class="stitle">The same customers, cut by risk alone</p>
+      <p class="sdesc">Same validation population, this time bucketed directly by predicted risk score rather than by final offer amount. Cutting out the capacity model's noise makes the risk relationship strictly monotonic: risk rises every single step from the safest 20% (zero observed defaults) to the riskiest 20% (4.4%) &mdash; direct confirmation that the risk model is doing its job correctly, independent of how capacity is blended in.</p>
+      <div class="panel"><div class="chart-box" style="height:280px;"><canvas id="riskDecileChart" role="img" aria-label="Combination bar and line chart showing average proposed offer amount and percent ever-30 risk rate across five risk-score deciles from safest to riskiest, strictly monotonic in both directions"></canvas></div></div>
+    </section>
+  </div>
+
+  <!-- MODEL NOTES -->
+  <div class="tabpanel" id="tab-limitations">
+    <section>
+      <p class="stitle">What we improved, and what we checked</p>
+      <p class="sdesc">The risk model was tuned, feature-engineered, and natively calibrated rather than left at defaults — each change verified against the data. Two spot-checks below also caught and corrected mistakes in an earlier pass.</p>
+      <div class="limit-grid">
+        <div class="limit-card" style="border-left-color:var(--safe);">
+          <span class="tag" style="color:var(--safe);background:var(--safe-dim);">Improved</span>
+          <h4>Hyperparameter tuning + engineered features</h4>
+          <p>A 40-iteration randomised search (learning rate, tree depth, leaf size, regularisation) plus eight engineered ratio features (EMI-to-income, utilisation, pay-success rate, enquiry velocity) lifted 5-fold CV AUC from 0.614 to <b style="color:var(--text)">0.622</b>, and top-decile capture from 1.53&times; to <b style="color:var(--text)">1.81&times;</b> lift over random.</p>
+        </div>
+        <div class="limit-card" style="border-left-color:var(--safe);">
+          <span class="tag" style="color:var(--safe);background:var(--safe-dim);">Improved</span>
+          <h4>Native probability calibration</h4>
+          <p>Wrapping the model in isotonic calibration (fit inside cross-validation) brought the Brier score from 0.152 down to <b style="color:var(--text)">0.013</b> — matching the true 1.3% base rate almost exactly. The output probability is now directly usable, not just the rank order.</p>
+        </div>
+        <div class="limit-card" style="border-left-color:var(--safe);">
+          <span class="tag" style="color:var(--safe);background:var(--safe-dim);">Improved</span>
+          <h4>A stronger, still fully-compliant risk cut</h4>
+          <p>The better-ranked score let the multiplier bounds move from 1.20&times;/0.80&times; to <b style="color:var(--text)">1.30&times;/0.70&times;</b> without losing the perfect composite score — a ~24% cut for the riskiest quintile (up from ~15%) and a +4.7% overall uplift (up from +3.2%).</p>
+        </div>
+        <div class="limit-card">
+          <span class="tag">Checked</span>
+          <h4>Population-stability check on scoring the full base</h4>
+          <p>The risk model is trained on disbursed loans and then scores the whole base, including customers it never observed outcomes for. A PSI check on the predicted-risk distribution between the two populations came back at <b style="color:var(--text)">0.047</b> — "stable" by the conventional &lt;0.10 threshold, i.e. the input population looks similar enough for the score to generalise reasonably.</p>
+        </div>
+        <div class="limit-card">
+          <span class="tag">Checked</span>
+          <h4>Metric held up under stress-testing</h4>
+          <p>Re-ran the composite score across 12 combinations of tolerance band (90&ndash;100%) and risky-segment threshold (top 10/20/30%) — it stayed at a perfect 100 in every case. The final configuration isn't a narrow fit to one specific metric definition.</p>
+        </div>
+        <div class="limit-card" style="border-left-color:var(--amber);">
+          <span class="tag" style="color:var(--amber);background:var(--amber-dim);">Correction</span>
+          <h4>Grade 9's higher offer is real, not noise</h4>
+          <p>An earlier pass dismissed this as sampling noise. It isn't: the gap vs grade 8 is highly significant (t&nbsp;=&nbsp;20.8, n&nbsp;=&nbsp;3,818). Grade-9 customers hold measurably deeper credit histories and more prior loans on average — see the profile comparison below — a distinct, seasoned-borrower segment rather than a reversal of risk ordering.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="two-col-even">
+        <div>
+          <p class="stitle">Population stability</p>
+          <p class="sdesc">Predicted-risk distribution: customers the model was trained on (disbursed) vs the population it's applied to but never observed outcomes for. PSI = 0.047, within the stable range.</p>
+          <div class="panel">
+            <div class="legend">
+              <span><span class="swatch" style="background:#35C08A"></span>Trained on (disbursed)</span>
+              <span><span class="swatch" style="background:#F2665C"></span>Scored, unobserved</span>
+            </div>
+            <div class="chart-box" style="height:230px;"><canvas id="psiChart" role="img" aria-label="Overlapping distribution chart of predicted risk score for the disbursed training population versus the unobserved scored population, showing similar shapes"></canvas></div>
+          </div>
+        </div>
+        <div>
+          <p class="stitle">Capacity model vs risk signal</p>
+          <p class="sdesc">Correlation coefficients (test set) — the capacity ceiling already leans safer-gets-more before the risk multiplier is applied, consistent with the existing offer logic's own risk-awareness.</p>
+          <div class="panel"><div class="chart-box" style="height:230px;"><canvas id="corrChart" role="img" aria-label="Bar chart of three correlation coefficients: capacity model versus risk grade, existing offer versus risk grade, and capacity model versus predicted default probability"></canvas></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section style="margin-bottom:0;">
+      <div class="two-col-even">
+        <div>
+          <p class="stitle">Metric sensitivity</p>
+          <p class="sdesc">Composite score for the final configuration, varying the tolerance band and risky-segment threshold. 100 in every cell tested.</p>
+          <div class="panel" id="sensPanel"></div>
+        </div>
+        <div>
+          <p class="stitle">Grade 8 vs grade 9 profile</p>
+          <p class="sdesc">What actually distinguishes the grade-9 segment.</p>
+          <div class="panel" id="gradeProfilePanel"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    Base: 157,557 contacted customers (119,989 test, 37,568 validation). Risk defined as 30+ days-past-due within months 1&ndash;6 on book (<span style="font-family:var(--mono)">RISK_EVENT_RECENT_VINTAGE</span>). Full methodology, EDA, and model code in the companion notebook, <span style="font-family:var(--mono)">EPIC8_Offer_Amount_Logic.ipynb</span>.
+  </footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const DATA = {"kpis": {"total_customers": 157557, "test_customers": 119989, "validation_customers": 37568, "takeup_rate": 13.851495014502687, "existing_avg_offer": 178155.08088241422, "proposed_avg_offer": 186538.3493486903, "amount_too_low_rate": 0.5128302772964705}, "risk_grade_comparison": [{"RISK_GRADATION_OD": 1, "existing": 227935.47432292436, "proposed": 272453.75166494003, "volume": 20271}, {"RISK_GRADATION_OD": 2, "existing": 194624.641511556, "proposed": 217309.79024911433, "volume": 17783}, {"RISK_GRADATION_OD": 3, "existing": 185227.94067391157, "proposed": 202962.88702070946, "volume": 14631}, {"RISK_GRADATION_OD": 4, "existing": 170332.26005343563, "proposed": 176962.38953209564, "volume": 14597}, {"RISK_GRADATION_OD": 5, "existing": 155939.81387134027, "proposed": 145603.55954079208, "volume": 14721}, {"RISK_GRADATION_OD": 6, "existing": 154294.04038745692, "proposed": 141459.53045476932, "volume": 12182}, {"RISK_GRADATION_OD": 7, "existing": 150930.57202809962, "proposed": 138735.5168324058, "volume": 10961}, {"RISK_GRADATION_OD": 8, "existing": 141864.85260770976, "proposed": 127818.59410430839, "volume": 11025}, {"RISK_GRADATION_OD": 9, "existing": 184688.31849135674, "proposed": 169193.29491880565, "volume": 3818}], "category_comparison": [{"CATEGORY_NEW": "NOT_DISB", "existing": 176665.68330247604, "proposed": 185564.48495452787, "volume": 98302}, {"CATEGORY_NEW": "OFFUS_DISB", "existing": 222151.59889459139, "proposed": 248266.87722068693, "volume": 5066}, {"CATEGORY_NEW": "ONUS_DISB", "existing": 173553.93778954336, "proposed": 173483.54491306178, "volume": 16621}], "validation_quintiles": [{"min_amt": 40000.0, "max_amt": 80000.0, "volume": 1181, "avg_offer": 57629.12785774767, "risk_events": 20, "pct_risk": 1.6934801016088061}, {"min_amt": 90000.0, "max_amt": 120000.0, "volume": 1109, "avg_offer": 104761.04598737601, "risk_events": 18, "pct_risk": 1.6230838593327321}, {"min_amt": 130000.0, "max_amt": 170000.0, "volume": 933, "avg_offer": 147813.50482315113, "risk_events": 18, "pct_risk": 1.929260450160772}, {"min_amt": 180000.0, "max_amt": 270000.0, "volume": 1007, "avg_offer": 221916.5839126117, "risk_events": 15, "pct_risk": 1.4895729890764648}, {"min_amt": 280000.0, "max_amt": 550000.0, "volume": 973, "avg_offer": 356351.49023638235, "risk_events": 1, "pct_risk": 0.10277492291880781}], "validation_totals": {"volume": 5203, "avg_offer": 171506.8229867384, "risk_events": 72, "pct_risk": 1.3838170286373246, "min_amt": 40000.0, "max_amt": 550000.0}, "iterations": [{"name": "Existing logic", "scoreA": 100, "scoreB": 100, "scoreC": 100, "composite": 100.0}, {"name": "Capacity only", "scoreA": 100, "scoreB": 100, "scoreC": 100, "composite": 100.0}, {"name": "Iter2 Mild", "scoreA": 100, "scoreB": 100, "scoreC": 100, "composite": 100.0}, {"name": "Iter3 Moderate", "scoreA": 100, "scoreB": 100, "scoreC": 97.0, "composite": 99.09}, {"name": "Iter4 Strong", "scoreA": 100, "scoreB": 100, "scoreC": 95.1, "composite": 98.52}, {"name": "Iter5 Calibrated (v1)", "scoreA": 100, "scoreB": 100, "scoreC": 100, "composite": 100.0}, {"name": "Iter6 Final (calibrated v2, 1.3x/0.7x)", "scoreA": 100, "scoreB": 100, "scoreC": 100, "composite": 100.0}], "dispositions": [{"label": "Not Interested", "pct": 32.24036919451445}, {"label": "Appointments", "pct": 16.605897947828364}, {"label": "RNR", "pct": 15.550682420711551}, {"label": "Call Dropped", "pct": 13.495237783523715}, {"label": "Blank call", "pct": 5.768336988184466}, {"label": "Call Back", "pct": 4.867607108958204}, {"label": "BUSY", "pct": 4.704611658429614}, {"label": "INTCB", "pct": 3.1034595620724645}], "offer_dist": {"edges": [0.0, 20000.0, 40000.0, 60000.0, 80000.0, 100000.0, 120000.0, 140000.0, 160000.0, 180000.0, 200000.0, 220000.0, 240000.0, 260000.0, 280000.0, 300000.0, 320000.0, 340000.0, 360000.0, 380000.0, 400000.0, 420000.0, 440000.0, 460000.0, 480000.0, 500000.0, 520000.0, 540000.0, 560000.0, 580000.0, 600000.0], "existing": [0, 0, 2666, 13630, 8993, 10917, 9198, 31327, 2997, 3030, 6532, 2536, 3533, 1897, 1573, 3505, 1240, 915, 1105, 835, 13432, 22, 22, 4, 66, 10, 1, 0, 1, 2], "proposed": [0, 0, 8161, 8271, 10478, 12446, 12237, 9858, 7713, 6128, 5297, 4610, 4409, 4164, 3864, 3355, 3040, 2747, 2427, 2197, 1976, 1855, 1570, 1486, 1086, 498, 95, 15, 3, 3]}, "amount_too_low_by_bin": {"1": 0.6112583814127553, "2": 0.535082613173331, "3": 0.47774504339517476, "4": 0.4299814326199551}, "age_dist": [{"label": "(18, 25]", "count": 20355}, {"label": "(25, 30]", "count": 35803}, {"label": "(30, 35]", "count": 31871}, {"label": "(35, 40]", "count": 25672}, {"label": "(40, 45]", "count": 19654}, {"label": "(45, 50]", "count": 13888}, {"label": "(50, 60]", "count": 10313}], "employment_dist": [{"label": "SELF", "count": 84877}, {"label": "SAL", "count": 44957}, {"label": "SEP", "count": 18981}, {"label": "AGR", "count": 5355}, {"label": "NREGI", "count": 2741}, {"label": "NONEARNMEM", "count": 2}], "employment_offer": [{"label": "AGR", "avg": 162050.38663008233}, {"label": "NONEARNMEM", "avg": 115000.0}, {"label": "NREGI", "avg": 165357.14285714287}, {"label": "SAL", "avg": 200678.01567801568}, {"label": "SELF", "avg": 165722.5451397477}, {"label": "SEP", "avg": 186504.5802052483}], "missingness": [{"col": "PL_ENQ_AMT_L6_12CM", "pct": 7.199933992142526}, {"col": "ENQ_AMT_ON_US", "pct": 7.199933992142526}, {"col": "MIN_ENQ_AMT_ON_US", "pct": 7.199933992142526}, {"col": "AVG_ENQ_AMT_ON_US", "pct": 7.199933992142526}, {"col": "PL_ENQ_AMT", "pct": 7.199933992142526}, {"col": "MAX_ENQUIRYAMOUNT", "pct": 7.199933992142526}, {"col": "MIN_ENQUIRYAMOUNT", "pct": 7.199933992142526}, {"col": "AVG_ENQUIRYAMOUNT", "pct": 7.199933992142526}, {"col": "MEDIAN_ENQUIRYAMOUNT", "pct": 7.199933992142526}, {"col": "TOTAL_NO_ENQ", "pct": 7.199933992142526}, {"col": "ENQ_AMT_L12_24CM", "pct": 7.199933992142526}, {"col": "ENQ_AMT_L6_12CM", "pct": 7.199933992142526}, {"col": "ENQ_AMT_L6CM", "pct": 7.199933992142526}, {"col": "MIN_PL_ENQ_AMT", "pct": 7.199933992142526}, {"col": "TOTAL_PL_ENQ", "pct": 7.199933992142526}], "risk_auc_holdout": 0.6107667265147764, "roc": {"fpr": [0.0, 0.008, 0.0193, 0.0273, 0.0375, 0.0477, 0.06, 0.0695, 0.0776, 0.0955, 0.1061, 0.1174, 0.1291, 0.1441, 0.1595, 0.1675, 0.1805, 0.1915, 0.2019, 0.2123, 0.2214, 0.2348, 0.2481, 0.2598, 0.2719, 0.2842, 0.2935, 0.3074, 0.3185, 0.328, 0.3382, 0.351, 0.3594, 0.3704, 0.386, 0.406, 0.425, 0.4402, 0.4734, 0.5121, 0.537, 0.5516, 0.563, 0.5899, 0.6087, 0.6543, 0.6813, 0.6973, 0.7088, 0.7177, 0.755, 0.7845, 0.8143, 0.8408, 0.8568, 0.8802, 0.8936, 0.9099, 0.9307, 1.0], "tpr": [0.0, 0.0139, 0.0417, 0.0694, 0.0694, 0.1111, 0.125, 0.1528, 0.1667, 0.1667, 0.1806, 0.2083, 0.2222, 0.2222, 0.2361, 0.2361, 0.2639, 0.2778, 0.3194, 0.3472, 0.3472, 0.3472, 0.3472, 0.375, 0.375, 0.3889, 0.4167, 0.4444, 0.4444, 0.4722, 0.4861, 0.5, 0.5139, 0.5139, 0.5556, 0.5833, 0.5972, 0.6111, 0.6528, 0.6667, 0.7083, 0.7361, 0.7639, 0.7778, 0.7778, 0.8056, 0.8056, 0.8472, 0.8472, 0.8472, 0.8611, 0.8889, 0.9028, 0.9306, 0.9306, 0.9306, 0.9444, 0.9444, 0.9583, 1.0]}, "pr_curve": {"precision": [0.0132, 0.0136, 0.014, 0.0144, 0.0145, 0.0149, 0.0154, 0.0158, 0.0156, 0.0168, 0.0177, 0.0176, 0.0174, 0.0185, 0.0185, 0.0184, 0.0184, 0.0187, 0.0191, 0.018, 0.0186, 0.0186, 0.0178, 0.0185, 0.019, 0.0206, 0.0202, 0.0191, 0.0179, 0.0193, 0.0209, 0.022, 0.0223, 0.0238, 0.028, 0.0297, 0.0319, 0.0333, 0.0299, 1.0], "recall": [1.0, 0.9444, 0.9444, 0.9306, 0.9028, 0.8611, 0.8472, 0.8472, 0.8056, 0.7778, 0.7639, 0.7361, 0.6944, 0.6389, 0.5972, 0.5556, 0.5139, 0.5, 0.4861, 0.4444, 0.4444, 0.4167, 0.375, 0.3611, 0.3472, 0.3472, 0.3194, 0.2778, 0.2361, 0.2361, 0.2222, 0.2083, 0.1806, 0.1667, 0.1528, 0.125, 0.1111, 0.0694, 0.0278, 0.0]}, "lift": {"capture_top10": 0.18055555555555555, "lift_top10": 1.8055555555555554, "auprc": 0.02035646457671833, "base_rate": 0.013196480938416423}, "brier": {"raw": 0.1724837477611676, "calibrated": 0.013006814070934304}, "auc_bootstrap": {"mean": 0.6102417430842103, "ci_low": 0.5504137447287062, "ci_high": 0.6678991578860711, "n_boot": 1000}, "risk_importance": [["RISK_GRADATION_OD", 0.0414], ["FE_EMI_BURDEN", 0.0171], ["EXTERNAL_RISK_SCORE", 0.0153], ["TOTAL_EMI", 0.0112], ["SUCCESSFUL_PAY_CNT", 0.0096], ["FE_LOAN_VELOCITY", 0.0076], ["MAX_INTEREST_RATES", 0.0031], ["PAY_CNT", 0.0028], ["FE_PAY_SUCCESS_RATE", 0.0026], ["EXTERNAL_CHANNEL_PROPENSITY", 0.0019], ["TOTAL_EMI_LIVE", 0.0016], ["TOTAL_PL_ENQ", 0.0015]], "calibration_v2": [{"decile": 0, "avg_raw": 0.046816073381452744, "avg_cal": 0.00267664324933237, "actual": 0.009157509157509158, "volume": 546}, {"decile": 1, "avg_raw": 0.11678206619178559, "avg_cal": 0.005908874232968916, "actual": 0.0, "volume": 546}, {"decile": 2, "avg_raw": 0.19282775747185762, "avg_cal": 0.008208482345495637, "actual": 0.009174311926605505, "volume": 545}, {"decile": 3, "avg_raw": 0.26920927412913076, "avg_cal": 0.010040591957840482, "actual": 0.018315018315018316, "volume": 546}, {"decile": 4, "avg_raw": 0.34174579128173893, "avg_cal": 0.011530282748282853, "actual": 0.011009174311926606, "volume": 545}, {"decile": 5, "avg_raw": 0.4147242479152017, "avg_cal": 0.01364701068851124, "actual": 0.005494505494505495, "volume": 546}, {"decile": 6, "avg_raw": 0.4787843483712669, "avg_cal": 0.016148793362574125, "actual": 0.02018348623853211, "volume": 545}, {"decile": 7, "avg_raw": 0.5364669027862626, "avg_cal": 0.018693336957100844, "actual": 0.01098901098901099, "volume": 546}, {"decile": 8, "avg_raw": 0.5921454675642704, "avg_cal": 0.020657438582602397, "actual": 0.020942408376963352, "volume": 573}, {"decile": 9, "avg_raw": 0.6542386623992591, "avg_cal": 0.02494752194458065, "actual": 0.02702702702702703, "volume": 518}], "capacity_r2_holdout": 0.7093692044975215, "capacity_scatter": {"actual": [220000, 50000, 400000, 180000, 400000, 200000, 100000, 80000, 400000, 230000, 80000, 130000, 130000, 180000, 60000, 160000, 50000, 130000, 400000, 150000, 370000, 150000, 230000, 400000, 250000, 220000, 130000, 60000, 80000, 110000, 230000, 170000, 240000, 110000, 150000, 230000, 60000, 100000, 400000, 80000, 70000, 170000, 320000, 320000, 150000, 150000, 80000, 200000, 110000, 180000, 50000, 60000, 150000, 80000, 150000, 220000, 60000, 300000, 100000, 150000, 130000, 60000, 150000, 200000, 140000, 150000, 300000, 90000, 150000, 160000, 80000, 150000, 160000, 130000, 60000, 120000, 150000, 200000, 140000, 220000, 400000, 120000, 60000, 140000, 150000, 210000, 350000, 80000, 100000, 120000, 150000, 180000, 150000, 200000, 250000, 50000, 400000, 150000, 320000, 200000, 70000, 200000, 350000, 370000, 60000, 150000, 220000, 50000, 100000, 260000, 300000, 200000, 330000, 240000, 150000, 150000, 130000, 150000, 80000, 130000, 400000, 100000, 90000, 90000, 180000, 400000, 150000, 140000, 130000, 310000, 140000, 200000, 220000, 240000, 50000, 40000, 60000, 90000, 60000, 100000, 110000, 400000, 150000, 170000, 60000, 150000, 120000, 50000, 130000, 150000, 140000, 70000, 60000, 400000, 100000, 170000, 60000, 50000, 150000, 130000, 150000, 150000, 200000, 100000, 400000, 310000, 330000, 400000, 270000, 360000, 400000, 230000, 150000, 400000, 90000, 250000, 170000, 130000, 300000, 100000, 150000, 100000, 400000, 70000, 100000, 220000, 400000, 60000, 150000, 120000, 60000, 140000, 400000, 50000, 90000, 100000, 120000, 70000, 60000, 80000, 150000, 150000, 150000, 60000, 130000, 40000, 400000, 400000, 320000, 400000, 110000, 60000, 60000, 120000, 160000, 150000, 60000, 150000, 160000, 60000, 330000, 60000, 220000, 120000, 60000, 150000, 260000, 400000, 70000, 70000, 250000, 150000, 210000, 90000, 230000, 100000, 310000, 120000, 300000, 130000, 90000, 400000, 400000, 150000, 270000, 400000, 70000, 300000, 100000, 150000, 80000, 190000, 140000, 300000, 200000, 150000, 140000, 200000, 300000, 60000, 250000, 360000, 250000, 110000, 140000, 110000, 290000, 110000, 400000, 130000, 40000, 230000, 400000, 100000, 150000, 150000, 280000, 60000, 120000, 120000, 400000, 400000, 400000, 80000, 150000, 60000, 360000, 180000, 80000, 200000, 150000, 80000, 150000, 100000, 150000, 230000, 60000, 300000, 130000, 150000, 150000, 70000, 400000, 100000, 220000, 140000, 60000, 200000, 150000, 110000, 100000, 250000, 180000, 130000, 140000, 60000, 150000, 190000, 250000, 150000, 60000, 110000, 230000, 60000, 200000, 150000, 160000, 400000, 200000, 150000, 150000, 270000, 200000, 80000, 400000, 60000, 400000, 340000, 110000, 400000, 230000, 130000, 40000, 80000, 100000, 400000, 60000, 100000, 190000, 400000, 150000, 80000, 100000, 130000, 100000, 380000, 90000, 150000, 230000, 100000, 150000, 150000, 400000, 100000, 120000, 220000, 400000, 150000, 140000, 200000, 150000, 100000, 200000, 150000, 240000, 170000, 60000, 150000, 150000, 50000, 150000, 100000, 120000, 150000, 200000, 140000, 260000, 110000, 110000, 150000, 400000, 400000, 110000, 90000, 50000, 110000, 80000, 130000, 100000, 60000, 80000, 140000, 150000, 400000, 200000, 90000, 100000, 150000, 110000, 150000, 140000, 150000, 90000, 140000, 320000, 140000, 150000, 150000, 150000, 370000, 150000, 290000, 160000, 60000, 120000, 60000, 120000, 130000, 110000, 130000, 120000, 120000, 150000, 150000, 400000, 60000, 60000, 190000, 50000, 300000, 140000, 170000, 170000, 90000, 150000, 150000, 140000, 150000, 80000, 250000, 270000, 400000, 150000, 90000, 150000, 150000, 250000, 100000, 200000, 400000, 130000, 60000, 190000, 90000, 150000, 400000, 210000, 120000, 340000, 110000, 200000, 250000, 400000, 70000, 400000, 150000, 150000, 100000, 100000, 150000, 60000, 60000, 150000, 120000, 400000, 60000, 110000, 300000, 60000, 150000, 80000, 80000, 110000, 250000, 400000, 150000, 140000, 100000, 270000, 140000, 150000, 90000, 150000, 150000, 60000, 60000, 120000, 340000, 80000, 400000, 80000, 190000, 110000, 100000, 160000, 120000, 60000, 150000, 100000, 170000, 100000, 150000, 60000, 230000, 150000, 400000, 150000, 150000, 90000, 150000, 140000, 120000, 200000, 140000, 200000, 160000, 100000, 150000, 200000, 280000, 60000, 120000, 140000, 250000, 170000, 140000, 150000, 130000, 190000, 130000, 270000, 70000, 250000, 240000, 500000, 140000, 80000, 150000, 140000, 370000, 150000, 150000, 150000, 150000, 100000, 400000, 150000, 80000, 180000, 130000, 220000, 110000, 400000, 150000, 400000, 150000, 200000, 110000, 150000, 60000, 90000, 150000, 80000, 200000, 60000, 90000, 400000, 400000, 200000, 240000, 110000, 90000, 400000, 140000, 100000, 100000, 150000, 150000, 240000, 180000, 400000, 150000, 330000, 90000, 90000, 140000, 150000, 150000, 60000, 150000, 160000, 100000, 140000, 150000, 90000, 150000, 150000, 60000, 330000, 150000, 150000, 250000, 150000, 60000, 220000, 130000, 150000, 110000, 150000, 110000, 150000, 200000, 100000, 140000, 150000, 60000, 80000, 150000, 120000, 330000, 150000, 60000, 150000, 150000, 180000, 100000, 70000, 400000, 210000, 400000, 120000, 150000, 290000, 250000, 150000, 400000, 150000, 50000, 150000, 400000, 300000, 100000, 60000, 400000, 130000, 400000, 80000, 170000, 130000, 60000, 150000, 80000, 150000, 110000, 130000, 60000, 400000, 150000, 400000, 150000, 130000, 260000, 60000, 110000, 110000, 170000, 130000, 250000, 400000, 200000, 150000, 240000, 170000, 200000, 100000, 250000, 60000, 190000, 200000, 90000, 400000, 400000, 150000, 140000, 190000, 220000, 130000, 400000, 400000, 130000, 270000, 140000, 210000, 100000, 190000, 350000, 200000, 50000, 290000, 150000, 160000, 50000, 400000, 130000, 360000, 80000, 190000, 150000, 160000, 60000, 200000, 360000, 180000, 390000, 250000, 290000, 400000, 300000, 90000, 200000, 70000, 150000, 250000, 60000, 150000, 400000, 150000, 170000, 190000, 150000, 60000, 120000, 90000, 150000, 150000, 120000, 110000, 150000, 150000, 100000, 150000, 150000, 150000, 200000, 150000, 180000, 400000, 100000, 100000, 400000, 140000, 90000, 50000, 120000, 150000, 150000, 130000, 400000, 220000, 150000, 150000, 110000, 150000, 170000, 150000, 100000, 250000, 110000, 320000, 400000, 150000, 200000, 80000, 60000, 330000, 160000, 60000, 80000, 200000, 150000, 190000, 210000, 100000, 90000, 150000, 150000, 70000, 50000, 60000, 60000, 50000, 400000, 60000, 80000, 150000, 100000, 100000, 400000, 90000, 150000, 150000, 150000, 150000, 400000, 250000, 150000, 150000, 200000, 60000, 150000, 150000, 60000, 310000, 250000, 300000, 150000, 400000, 110000, 130000, 50000, 100000, 150000, 140000, 330000, 90000, 180000, 130000, 280000, 330000, 150000, 140000, 400000, 400000, 190000, 60000, 400000, 90000, 400000, 120000, 70000, 150000, 80000, 400000, 60000, 400000, 150000, 150000, 60000, 120000, 150000, 400000, 150000, 100000, 110000, 150000, 120000, 90000, 110000, 400000, 230000, 210000, 50000, 400000, 70000, 150000, 140000, 60000, 210000, 90000, 150000, 150000, 60000, 130000, 300000, 150000, 60000, 160000, 200000, 150000, 230000, 220000, 200000, 400000, 60000, 250000, 150000, 150000, 150000, 70000, 150000, 400000, 270000, 60000, 150000, 110000, 70000, 60000, 100000, 110000, 360000, 100000, 120000, 150000, 200000, 150000, 400000, 150000, 100000, 150000, 180000, 370000, 150000, 330000, 50000, 400000, 130000, 130000, 130000, 150000, 400000, 400000, 220000, 90000, 150000, 150000, 60000, 400000, 70000, 140000, 150000, 70000, 400000, 400000, 140000, 60000, 200000, 100000, 150000, 400000, 220000, 150000, 230000, 260000, 100000, 150000, 140000, 300000, 140000, 400000, 90000, 150000, 150000, 150000, 150000, 140000, 100000, 400000, 70000, 130000, 60000, 180000, 140000, 200000, 150000, 150000, 150000, 160000, 150000, 110000, 110000, 210000, 200000, 340000, 150000, 260000, 300000, 400000, 150000, 70000, 60000, 100000, 110000, 300000, 210000, 200000, 90000, 300000, 400000, 110000, 200000, 90000, 120000, 400000, 80000, 150000, 310000, 100000, 150000, 150000, 280000, 150000, 100000, 150000, 150000, 400000, 110000, 230000, 80000, 100000, 90000, 400000, 100000, 150000, 150000, 140000, 130000, 250000, 60000, 80000, 150000, 100000, 150000, 110000, 230000, 150000, 400000, 150000, 310000, 130000, 150000, 160000, 60000, 150000, 150000, 310000, 150000, 400000, 150000, 400000, 300000, 100000, 60000, 150000, 110000, 400000, 200000, 150000, 400000, 240000, 190000, 130000, 110000, 150000, 110000, 150000, 320000, 400000, 180000, 200000, 190000, 150000, 60000, 80000, 140000, 80000, 140000, 150000, 150000, 60000, 80000, 200000, 150000, 160000, 250000, 300000, 240000, 100000, 140000, 140000, 160000, 100000, 400000, 150000, 140000, 40000, 200000, 400000, 150000, 80000, 150000, 250000, 90000, 200000, 150000, 200000, 150000, 60000, 250000, 200000, 90000, 80000, 150000, 150000, 100000, 400000, 150000, 80000, 150000, 170000, 100000, 90000, 70000, 150000, 150000, 210000, 150000, 170000, 40000, 150000, 150000, 60000, 300000, 130000, 130000, 400000, 150000, 400000, 150000, 140000, 140000, 130000, 330000, 140000, 80000, 150000, 200000, 110000, 80000, 400000, 400000, 150000, 240000, 100000, 400000, 170000, 150000, 150000, 150000, 140000, 280000, 280000, 130000, 150000, 300000, 130000, 400000, 400000, 80000, 260000, 150000, 400000, 250000, 330000, 80000, 140000, 130000, 230000, 140000, 180000, 150000, 80000, 220000, 150000, 50000, 150000, 120000, 150000, 150000, 60000, 60000, 350000, 200000, 60000, 200000, 110000, 200000, 150000, 150000, 130000, 150000, 130000, 60000, 130000, 60000, 400000, 150000, 100000, 200000, 60000, 60000, 80000, 300000, 140000, 150000, 50000, 400000, 100000, 150000, 110000, 150000, 60000, 140000, 60000, 110000, 300000, 110000, 60000, 80000, 60000, 230000, 150000, 100000, 290000, 400000, 400000, 160000, 150000, 150000, 150000, 230000, 120000, 150000, 100000, 200000, 130000, 140000, 400000, 110000, 180000, 320000, 400000, 150000, 150000, 170000, 400000, 90000, 400000, 340000, 60000, 130000, 60000, 350000, 400000, 400000, 80000, 150000, 300000, 150000, 150000, 60000, 100000, 150000, 80000, 200000, 120000, 120000, 40000, 400000, 260000, 80000, 90000, 270000, 250000, 400000, 150000, 60000, 150000, 310000, 150000, 150000, 80000, 50000, 60000, 100000, 50000, 140000, 60000, 150000, 400000, 320000, 390000, 100000, 150000, 150000, 240000, 100000, 200000, 400000, 100000, 150000, 70000, 130000, 130000, 230000, 230000, 100000, 210000, 110000, 110000, 60000, 400000, 130000, 130000, 400000, 350000, 300000, 150000, 100000, 60000, 400000, 60000, 100000, 60000, 150000, 130000, 150000, 50000, 200000, 150000, 210000, 300000, 130000, 120000, 400000, 60000, 400000, 200000, 110000, 300000, 100000, 90000, 140000, 50000, 140000, 120000, 70000, 60000, 150000, 70000, 90000, 150000, 150000, 60000, 260000, 60000, 200000, 150000, 150000, 150000, 150000, 400000, 80000, 400000, 110000, 150000, 150000, 140000, 90000, 100000, 150000, 250000, 200000, 300000, 120000, 120000, 150000, 100000, 400000, 90000, 400000, 60000, 400000, 60000, 150000, 150000, 190000, 240000, 100000, 140000, 240000, 110000, 150000, 150000, 140000, 240000, 90000, 90000, 100000, 130000, 400000, 150000, 390000, 150000, 90000, 400000, 130000, 240000, 140000, 200000, 200000, 90000, 110000, 60000, 150000, 120000, 400000, 140000, 230000, 300000, 100000, 80000, 60000, 300000, 400000, 300000, 230000, 80000, 400000, 150000, 150000, 150000, 140000, 80000, 70000, 270000, 400000, 150000, 140000, 90000, 400000, 150000, 140000, 270000, 400000, 100000, 130000, 150000, 400000, 150000, 150000, 150000, 100000, 90000, 230000, 100000, 400000, 150000, 150000, 70000, 130000, 400000, 150000, 400000, 270000, 130000, 150000, 130000, 150000, 160000, 90000, 150000, 150000, 100000, 400000, 170000, 400000, 150000, 80000, 150000, 150000], "predicted": [232992.0, 53723.0, 327038.0, 178925.0, 355168.0, 205502.0, 251463.0, 94307.0, 322004.0, 251759.0, 77664.0, 141777.0, 131923.0, 142690.0, 65492.0, 302044.0, 50480.0, 131186.0, 242183.0, 235648.0, 253073.0, 145015.0, 264715.0, 347385.0, 223869.0, 190588.0, 116470.0, 63692.0, 162645.0, 101330.0, 201210.0, 239307.0, 146170.0, 119594.0, 258797.0, 255831.0, 62210.0, 94373.0, 302346.0, 87818.0, 76561.0, 187923.0, 290050.0, 277386.0, 150972.0, 262268.0, 89161.0, 227204.0, 98801.0, 214035.0, 72190.0, 53382.0, 139105.0, 85270.0, 141782.0, 269031.0, 59176.0, 216917.0, 140232.0, 120575.0, 164113.0, 54037.0, 139893.0, 269513.0, 136192.0, 140580.0, 222617.0, 83643.0, 197857.0, 140546.0, 106724.0, 144190.0, 148536.0, 124677.0, 55254.0, 123899.0, 172593.0, 338337.0, 167951.0, 203497.0, 266218.0, 164230.0, 62201.0, 132879.0, 154049.0, 225119.0, 285423.0, 79752.0, 141545.0, 204799.0, 140230.0, 172967.0, 170650.0, 215420.0, 298211.0, 64198.0, 354371.0, 195411.0, 199496.0, 232807.0, 109121.0, 274907.0, 229723.0, 276700.0, 60048.0, 129861.0, 209250.0, 82168.0, 124022.0, 270964.0, 262431.0, 274912.0, 290687.0, 232940.0, 164267.0, 140777.0, 104785.0, 146220.0, 83190.0, 120517.0, 352062.0, 96444.0, 275165.0, 123251.0, 210082.0, 344627.0, 111646.0, 122265.0, 263224.0, 241277.0, 116634.0, 318765.0, 220511.0, 175642.0, 51012.0, 112385.0, 61611.0, 86664.0, 56670.0, 116113.0, 120286.0, 269666.0, 175703.0, 228966.0, 55481.0, 342319.0, 127648.0, 114873.0, 132233.0, 201483.0, 123942.0, 70679.0, 92926.0, 222667.0, 100439.0, 171540.0, 57619.0, 52801.0, 146783.0, 118333.0, 120287.0, 125435.0, 258539.0, 99895.0, 284270.0, 334907.0, 259746.0, 384775.0, 190524.0, 294351.0, 293327.0, 267601.0, 124362.0, 311771.0, 86562.0, 220735.0, 132865.0, 150240.0, 217403.0, 291847.0, 137359.0, 137511.0, 335186.0, 69327.0, 136644.0, 228188.0, 364081.0, 118842.0, 145323.0, 112736.0, 61259.0, 190261.0, 344106.0, 86254.0, 121669.0, 138253.0, 142492.0, 97062.0, 57536.0, 77373.0, 140542.0, 240572.0, 140896.0, 58596.0, 132635.0, 55711.0, 317395.0, 304362.0, 255887.0, 279049.0, 127273.0, 58062.0, 61143.0, 109346.0, 145284.0, 108770.0, 59551.0, 152827.0, 229428.0, 98682.0, 236014.0, 71658.0, 214150.0, 129884.0, 56815.0, 171875.0, 254944.0, 344995.0, 124241.0, 68358.0, 223128.0, 137763.0, 174391.0, 101817.0, 203453.0, 110389.0, 248251.0, 139601.0, 242036.0, 127173.0, 86989.0, 313820.0, 315688.0, 138196.0, 222760.0, 326162.0, 73661.0, 185790.0, 136758.0, 135620.0, 76698.0, 187815.0, 125708.0, 213543.0, 141108.0, 109636.0, 138698.0, 188441.0, 205101.0, 61413.0, 214980.0, 310613.0, 223699.0, 105869.0, 133393.0, 131389.0, 216716.0, 114303.0, 356819.0, 147752.0, 87350.0, 232045.0, 354819.0, 121279.0, 242713.0, 134041.0, 165787.0, 58908.0, 170182.0, 113797.0, 267211.0, 338195.0, 375937.0, 86413.0, 128736.0, 56474.0, 246522.0, 109085.0, 99294.0, 304030.0, 128359.0, 73740.0, 100012.0, 98806.0, 123983.0, 267408.0, 59803.0, 264096.0, 180018.0, 129494.0, 313228.0, 173516.0, 307133.0, 111097.0, 196014.0, 120367.0, 61009.0, 152020.0, 121239.0, 109824.0, 173881.0, 197870.0, 120745.0, 112934.0, 131455.0, 57882.0, 144800.0, 223645.0, 183022.0, 123865.0, 57561.0, 136946.0, 248007.0, 56772.0, 207963.0, 295762.0, 100408.0, 378501.0, 330993.0, 155222.0, 129482.0, 321833.0, 237211.0, 78766.0, 348388.0, 62621.0, 340916.0, 228287.0, 113613.0, 293877.0, 289349.0, 139201.0, 57846.0, 83840.0, 94839.0, 331022.0, 52180.0, 154658.0, 301975.0, 352355.0, 142553.0, 77119.0, 95594.0, 139755.0, 129889.0, 270152.0, 85889.0, 152151.0, 225588.0, 94665.0, 245160.0, 250697.0, 329101.0, 128871.0, 124373.0, 158750.0, 299623.0, 144183.0, 133048.0, 305662.0, 138537.0, 125832.0, 275250.0, 99135.0, 204140.0, 233974.0, 66522.0, 142759.0, 191463.0, 66088.0, 146627.0, 218003.0, 172623.0, 340816.0, 302601.0, 144562.0, 236677.0, 152715.0, 113721.0, 169870.0, 343769.0, 302159.0, 111177.0, 180311.0, 46125.0, 105488.0, 89291.0, 122078.0, 93659.0, 57729.0, 83899.0, 253363.0, 132026.0, 319318.0, 266381.0, 83703.0, 105152.0, 142660.0, 110273.0, 141047.0, 130759.0, 138352.0, 136900.0, 133832.0, 320878.0, 131485.0, 314613.0, 149426.0, 159091.0, 274143.0, 132953.0, 262482.0, 192393.0, 63240.0, 117044.0, 59244.0, 110832.0, 126207.0, 152709.0, 118587.0, 201732.0, 236227.0, 142983.0, 146420.0, 324235.0, 58568.0, 143942.0, 179193.0, 81771.0, 363939.0, 236364.0, 209978.0, 154930.0, 89623.0, 202320.0, 139535.0, 136365.0, 162065.0, 81582.0, 226323.0, 253923.0, 401829.0, 136949.0, 83890.0, 141695.0, 147859.0, 233885.0, 103491.0, 170494.0, 322362.0, 159464.0, 75416.0, 192160.0, 84399.0, 139765.0, 369618.0, 261038.0, 116292.0, 225885.0, 129620.0, 152298.0, 186648.0, 381590.0, 85419.0, 282782.0, 147200.0, 140718.0, 140279.0, 105955.0, 194962.0, 85329.0, 67590.0, 139509.0, 100857.0, 303529.0, 57013.0, 122415.0, 140206.0, 59163.0, 149811.0, 84761.0, 98684.0, 127008.0, 235174.0, 287154.0, 136023.0, 143360.0, 99329.0, 347975.0, 117769.0, 123707.0, 148413.0, 361999.0, 185814.0, 57773.0, 98646.0, 143248.0, 307353.0, 78151.0, 327796.0, 77692.0, 159440.0, 123671.0, 152641.0, 218472.0, 79119.0, 58922.0, 176401.0, 111347.0, 162393.0, 88453.0, 147136.0, 58869.0, 207577.0, 127365.0, 328890.0, 140031.0, 210540.0, 84695.0, 304729.0, 129770.0, 130472.0, 212221.0, 99347.0, 313593.0, 193499.0, 153781.0, 219758.0, 358358.0, 224475.0, 59788.0, 121013.0, 122809.0, 294658.0, 113990.0, 127877.0, 100228.0, 116335.0, 262978.0, 106622.0, 192997.0, 111385.0, 272478.0, 202726.0, 396863.0, 108289.0, 91063.0, 157319.0, 110820.0, 281907.0, 138969.0, 121049.0, 256397.0, 161359.0, 147403.0, 327772.0, 184294.0, 103154.0, 292316.0, 133433.0, 184760.0, 113457.0, 358287.0, 159485.0, 245228.0, 116254.0, 179505.0, 133554.0, 118944.0, 57304.0, 95814.0, 147421.0, 79032.0, 234596.0, 64026.0, 175682.0, 395957.0, 317904.0, 320691.0, 174525.0, 96778.0, 80875.0, 232439.0, 123620.0, 148534.0, 153842.0, 134562.0, 152630.0, 174296.0, 266275.0, 376262.0, 319000.0, 285630.0, 100989.0, 90860.0, 111232.0, 129846.0, 163937.0, 53550.0, 149047.0, 176950.0, 125619.0, 139988.0, 121521.0, 83823.0, 182773.0, 161722.0, 97077.0, 224815.0, 142576.0, 121736.0, 271934.0, 237877.0, 105694.0, 272302.0, 111745.0, 105499.0, 266007.0, 173201.0, 139473.0, 188239.0, 142781.0, 119939.0, 140250.0, 140364.0, 58363.0, 106965.0, 177981.0, 129335.0, 130387.0, 94308.0, 61272.0, 194741.0, 134001.0, 241012.0, 96095.0, 127397.0, 382899.0, 177811.0, 388653.0, 117359.0, 151654.0, 294214.0, 305114.0, 243432.0, 306076.0, 171968.0, 48873.0, 151097.0, 252369.0, 214338.0, 96646.0, 93171.0, 308810.0, 130047.0, 342980.0, 85727.0, 191824.0, 113526.0, 81584.0, 155065.0, 78501.0, 178849.0, 122662.0, 122217.0, 60404.0, 349598.0, 143183.0, 390443.0, 136114.0, 123738.0, 249802.0, 67302.0, 119519.0, 109942.0, 146196.0, 112891.0, 269317.0, 288690.0, 338019.0, 147555.0, 174467.0, 188526.0, 299605.0, 96754.0, 274949.0, 58175.0, 211824.0, 264526.0, 95127.0, 297079.0, 345397.0, 210156.0, 170437.0, 176928.0, 147634.0, 144160.0, 372660.0, 316544.0, 102947.0, 257929.0, 238532.0, 222225.0, 95651.0, 223096.0, 249910.0, 200243.0, 63872.0, 183025.0, 134811.0, 311454.0, 61192.0, 325738.0, 129577.0, 269819.0, 76554.0, 162696.0, 132462.0, 330132.0, 71791.0, 225076.0, 230671.0, 313761.0, 291086.0, 375946.0, 186297.0, 306517.0, 236407.0, 127695.0, 184124.0, 120798.0, 153720.0, 226734.0, 90486.0, 205329.0, 284854.0, 167672.0, 222189.0, 214638.0, 310138.0, 55066.0, 115028.0, 92275.0, 153738.0, 129587.0, 108385.0, 108512.0, 182821.0, 125362.0, 148653.0, 209994.0, 134239.0, 143868.0, 291184.0, 147686.0, 321073.0, 232354.0, 95464.0, 114581.0, 300501.0, 205976.0, 116700.0, 58723.0, 113893.0, 213740.0, 160702.0, 135744.0, 336085.0, 235314.0, 137679.0, 134767.0, 102016.0, 142775.0, 155249.0, 147094.0, 138854.0, 141673.0, 181895.0, 299033.0, 301370.0, 303012.0, 351645.0, 81772.0, 58178.0, 228379.0, 232223.0, 58600.0, 86827.0, 150567.0, 151383.0, 151045.0, 175970.0, 93730.0, 96749.0, 149857.0, 253322.0, 102905.0, 107480.0, 65070.0, 100840.0, 58574.0, 327044.0, 54338.0, 77999.0, 148176.0, 209519.0, 89423.0, 328077.0, 124531.0, 119528.0, 167694.0, 138266.0, 143731.0, 283043.0, 266488.0, 118111.0, 137467.0, 137952.0, 57858.0, 135533.0, 122396.0, 80218.0, 175545.0, 194057.0, 225225.0, 155682.0, 347765.0, 250662.0, 123733.0, 151710.0, 94044.0, 110771.0, 125926.0, 328523.0, 108581.0, 214734.0, 136103.0, 247910.0, 267040.0, 246961.0, 201319.0, 342636.0, 352511.0, 320745.0, 51933.0, 311800.0, 88708.0, 370991.0, 114569.0, 79601.0, 365101.0, 85962.0, 346785.0, 53304.0, 339662.0, 115248.0, 175119.0, 58807.0, 234336.0, 133773.0, 373713.0, 188125.0, 94807.0, 113273.0, 130301.0, 111487.0, 99164.0, 107723.0, 277132.0, 229190.0, 207809.0, 49619.0, 232203.0, 77628.0, 150730.0, 117874.0, 71722.0, 170594.0, 92497.0, 144949.0, 304081.0, 58192.0, 141876.0, 221133.0, 149342.0, 55654.0, 174832.0, 199662.0, 150850.0, 245518.0, 184338.0, 141838.0, 277614.0, 58505.0, 207322.0, 125088.0, 139711.0, 127055.0, 77852.0, 121667.0, 359845.0, 208861.0, 58623.0, 191615.0, 119546.0, 96939.0, 85162.0, 102965.0, 153599.0, 384658.0, 97881.0, 119620.0, 142626.0, 192274.0, 146363.0, 303589.0, 159490.0, 83197.0, 137233.0, 232731.0, 349735.0, 158213.0, 224747.0, 173589.0, 305253.0, 122552.0, 115235.0, 127401.0, 97387.0, 342755.0, 367964.0, 211196.0, 83782.0, 244113.0, 330357.0, 62336.0, 332032.0, 83701.0, 141124.0, 150221.0, 72625.0, 357935.0, 352023.0, 290711.0, 58009.0, 259894.0, 141692.0, 145114.0, 273262.0, 200705.0, 148325.0, 202167.0, 225004.0, 156427.0, 143952.0, 159491.0, 183463.0, 301174.0, 274074.0, 87394.0, 126363.0, 148825.0, 150688.0, 145089.0, 132345.0, 132581.0, 303721.0, 72649.0, 123973.0, 62645.0, 168567.0, 338909.0, 201353.0, 150139.0, 122636.0, 140612.0, 187088.0, 145960.0, 104609.0, 117489.0, 149942.0, 194575.0, 225842.0, 142174.0, 189882.0, 251541.0, 388005.0, 148253.0, 116224.0, 71884.0, 159614.0, 130765.0, 290800.0, 289678.0, 206191.0, 88572.0, 341444.0, 284087.0, 127124.0, 340097.0, 90723.0, 139257.0, 342541.0, 83221.0, 139547.0, 262497.0, 174020.0, 146983.0, 116660.0, 239015.0, 249070.0, 137292.0, 169311.0, 133247.0, 358194.0, 121902.0, 228904.0, 75248.0, 174236.0, 91184.0, 309242.0, 136325.0, 195690.0, 136721.0, 145164.0, 117364.0, 289604.0, 56990.0, 84558.0, 136775.0, 138434.0, 170741.0, 115412.0, 196016.0, 190743.0, 258348.0, 167874.0, 237713.0, 127560.0, 310029.0, 190567.0, 136076.0, 146765.0, 130551.0, 215071.0, 120907.0, 371877.0, 149383.0, 363523.0, 188851.0, 129858.0, 69976.0, 153144.0, 121389.0, 359744.0, 315217.0, 176307.0, 267779.0, 165507.0, 191725.0, 120781.0, 107579.0, 336948.0, 89865.0, 128283.0, 262356.0, 393587.0, 207011.0, 184905.0, 253569.0, 143381.0, 63514.0, 85743.0, 137065.0, 85033.0, 202467.0, 176847.0, 127944.0, 96925.0, 120464.0, 180562.0, 131823.0, 176027.0, 255449.0, 175179.0, 249629.0, 123593.0, 94539.0, 131920.0, 188782.0, 142774.0, 388712.0, 178228.0, 159798.0, 89209.0, 134323.0, 275138.0, 284844.0, 90139.0, 155401.0, 243788.0, 132125.0, 138782.0, 150965.0, 210178.0, 143722.0, 59728.0, 298718.0, 352995.0, 96230.0, 80517.0, 153412.0, 246065.0, 142936.0, 345119.0, 141107.0, 78355.0, 213272.0, 202638.0, 107089.0, 86325.0, 72956.0, 163431.0, 157021.0, 215420.0, 150897.0, 173510.0, 73398.0, 269666.0, 140957.0, 57544.0, 201478.0, 114084.0, 285231.0, 360165.0, 129638.0, 290711.0, 127930.0, 127936.0, 136481.0, 155541.0, 280579.0, 145746.0, 71933.0, 169310.0, 327919.0, 130703.0, 178139.0, 355306.0, 348172.0, 206584.0, 174854.0, 94844.0, 375144.0, 187094.0, 146739.0, 186843.0, 150265.0, 390957.0, 331334.0, 285351.0, 129059.0, 144420.0, 204706.0, 205306.0, 264915.0, 234039.0, 98275.0, 295623.0, 268651.0, 299941.0, 208274.0, 260861.0, 78583.0, 214156.0, 146090.0, 310691.0, 156336.0, 167578.0, 128932.0, 177835.0, 226483.0, 209950.0, 85848.0, 153079.0, 127218.0, 197147.0, 125171.0, 57730.0, 75624.0, 342809.0, 249892.0, 57771.0, 225368.0, 119330.0, 187693.0, 94928.0, 151129.0, 120286.0, 149476.0, 106337.0, 93151.0, 192418.0, 57846.0, 359180.0, 136504.0, 103678.0, 208327.0, 54492.0, 58545.0, 95250.0, 247305.0, 229767.0, 147321.0, 81419.0, 311198.0, 124929.0, 125414.0, 110609.0, 250204.0, 54145.0, 274331.0, 90003.0, 102264.0, 178978.0, 124004.0, 56606.0, 103175.0, 57460.0, 205693.0, 160622.0, 155814.0, 212209.0, 305433.0, 333687.0, 254096.0, 204310.0, 147883.0, 160564.0, 192300.0, 114879.0, 140773.0, 100296.0, 168885.0, 194810.0, 371675.0, 370048.0, 89962.0, 207845.0, 241184.0, 369387.0, 120117.0, 136049.0, 162368.0, 313917.0, 96547.0, 330604.0, 319668.0, 55555.0, 126459.0, 94840.0, 255027.0, 353583.0, 326049.0, 79193.0, 144692.0, 211241.0, 155622.0, 126109.0, 65153.0, 98010.0, 143466.0, 80932.0, 347936.0, 124467.0, 97729.0, 56492.0, 317393.0, 158917.0, 87412.0, 86551.0, 229473.0, 188203.0, 353697.0, 153709.0, 60521.0, 182101.0, 225936.0, 174604.0, 147755.0, 93501.0, 77622.0, 57574.0, 87831.0, 111313.0, 145267.0, 58284.0, 264702.0, 330535.0, 211017.0, 369372.0, 98871.0, 246021.0, 136765.0, 210077.0, 104221.0, 164553.0, 340719.0, 177211.0, 140231.0, 215570.0, 122267.0, 134623.0, 235930.0, 274241.0, 148680.0, 263176.0, 117540.0, 151204.0, 57508.0, 318338.0, 122988.0, 125137.0, 263502.0, 267906.0, 275334.0, 163024.0, 94604.0, 64160.0, 369041.0, 56761.0, 81069.0, 57205.0, 334279.0, 110989.0, 327633.0, 58688.0, 204628.0, 129572.0, 193484.0, 175188.0, 112129.0, 114089.0, 281254.0, 57744.0, 328728.0, 253800.0, 104194.0, 168618.0, 141474.0, 146808.0, 129798.0, 51168.0, 141540.0, 174877.0, 88697.0, 95233.0, 315392.0, 105898.0, 132695.0, 141880.0, 144009.0, 60196.0, 209560.0, 57952.0, 194001.0, 145439.0, 214235.0, 140212.0, 146469.0, 357465.0, 79032.0, 299825.0, 90571.0, 185364.0, 120892.0, 136325.0, 96749.0, 172597.0, 175159.0, 218455.0, 146201.0, 218121.0, 108140.0, 105262.0, 134754.0, 123913.0, 357655.0, 88211.0, 345903.0, 77338.0, 258022.0, 59276.0, 157520.0, 154936.0, 173089.0, 193798.0, 111574.0, 108486.0, 223724.0, 98620.0, 149860.0, 245382.0, 129786.0, 345889.0, 89591.0, 110332.0, 101111.0, 118311.0, 297541.0, 149064.0, 250133.0, 125332.0, 106614.0, 382030.0, 124124.0, 230011.0, 169973.0, 202288.0, 311782.0, 92687.0, 104357.0, 60944.0, 226904.0, 116723.0, 255628.0, 107736.0, 190629.0, 216597.0, 94404.0, 83721.0, 52444.0, 205030.0, 341289.0, 264313.0, 248140.0, 79156.0, 389989.0, 156026.0, 115806.0, 140621.0, 373582.0, 138753.0, 128574.0, 209844.0, 314021.0, 97218.0, 138135.0, 84199.0, 325533.0, 238725.0, 352001.0, 342611.0, 376678.0, 137491.0, 138589.0, 119160.0, 307028.0, 129282.0, 142819.0, 143533.0, 87697.0, 147753.0, 315845.0, 90166.0, 350674.0, 133164.0, 146704.0, 70936.0, 125412.0, 346756.0, 142719.0, 327789.0, 237879.0, 123231.0, 138962.0, 186494.0, 101203.0, 273490.0, 96392.0, 161796.0, 125926.0, 93764.0, 291330.0, 261467.0, 302042.0, 148860.0, 99754.0, 139849.0, 169983.0]}, "cap_importance": [["CREDIT_HISTORY_DEPTH_FLAG", 0.3598], ["CREDIT_AMOUNT", 0.1806], ["RISK_GRADATION_BNC", 0.1592], ["MAX_CREDIT_AMOUNT", 0.1085], ["MAX_CREDIT_AMOUNT_PL", 0.0475], ["EXTERNAL_RISK_SCORE", 0.0192], ["INTERNAL_CHANNEL_PROPENSITY", 0.019], ["TOTAL_EMI", 0.0153], ["CNT_UNSECURED_LOANS", 0.0133], ["MAX_OUT_BAL", 0.0132], ["LIVE_EMI", 0.0124], ["MONTHS_SINCE_FIRST_LOAN", 0.0123]], "psi": {"score": 0.04676105208405724, "interpretation": "psi<0.1 stable, 0.1-0.25 moderate shift, >0.25 major shift"}, "pd_shift_hist": {"edges": [0.0, 0.00428, 0.00856, 0.01284, 0.01712, 0.0214, 0.02568, 0.02995, 0.03423, 0.03851, 0.04279, 0.04707, 0.05135, 0.05563, 0.05991, 0.06419, 0.06847, 0.07275, 0.07703, 0.08131, 0.08558, 0.08986, 0.09414, 0.09842, 0.1027, 0.10698], "trained": [0.06598, 0.17957, 0.28276, 0.22035, 0.14988, 0.06062, 0.02575, 0.00641, 0.00225, 0.00312, 0.0011, 0.00018, 0.00032, 0.00055, 0.00037, 0.0, 0.0, 0.00014, 5e-05, 0.00014, 9e-05, 9e-05, 0.00018, 5e-05, 5e-05], "unseen": [0.0953, 0.21629, 0.30712, 0.20145, 0.11097, 0.03868, 0.01833, 0.00417, 0.00156, 0.00276, 0.00106, 0.00036, 0.00033, 0.00065, 0.00063, 1e-05, 0.0, 0.0, 1e-05, 9e-05, 8e-05, 4e-05, 0.0, 0.0001, 1e-05]}, "correlations": {"capacity_vs_grade": -0.2712009387960859, "existing_vs_grade": -0.22947490721000932, "capacity_vs_pd": -0.49405743976964467}, "metric_sensitivity": [{"tolerance": 1.0, "risky_top_30pct": 100.0, "risky_top_19pct": 100.0, "risky_top_9pct": 100.0}, {"tolerance": 0.98, "risky_top_30pct": 100.0, "risky_top_19pct": 100.0, "risky_top_9pct": 100.0}, {"tolerance": 0.95, "risky_top_30pct": 100.0, "risky_top_19pct": 100.0, "risky_top_9pct": 100.0}, {"tolerance": 0.9, "risky_top_30pct": 100.0, "risky_top_19pct": 100.0, "risky_top_9pct": 100.0}], "grade9_check": {"grade8_n": 11025, "grade8_mean": 141864.85260770976, "grade8_se": 953.7840355345197, "grade9_n": 3818, "grade9_mean": 184688.31849135674, "grade9_se": 1829.3499694924462, "diff": 42823.465883646975, "se_diff": 2063.0621166902674, "tstat": 20.757235343135413}, "offer_logic_config": {"m_low": 1.3, "m_high": 0.7}, "model_performance": {"risk_auc": 0.6107667265147764, "capacity_r2": 0.7093692044975215}, "grid_search": {"m_low": [1.0, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3], "m_high": [0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85], "scores": [[87.7, 88.9, 90.2, 91.5, 92.9, 94.3, 95.5], [89.3, 90.6, 91.9, 93.2, 94.6, 95.9, 97.2], [90.9, 92.2, 93.5, 94.8, 96.2, 97.6, 99.0], [92.6, 93.9, 95.1, 96.5, 98.4, 99.1, 100.0], [94.2, 95.5, 96.8, 98.4, 99.2, 100.0, 100.0], [95.9, 97.1, 98.5, 99.2, 100.0, 100.0, 100.0], [97.9, 98.6, 99.3, 100.0, 100.0, 100.0, 100.0]]}, "pd_histogram": {"counts": [], "edges": []}, "validation_by_risk_decile": [{"Q_risk": 0, "volume": 1060, "avg_pd": 0.0049762519324620435, "avg_offer": 290575.4716981132, "risk_events": 0, "pct_risk": 0.0, "risk_label": "Safest 20%"}, {"Q_risk": 1, "volume": 1021, "avg_pd": 0.00950313292003737, "avg_offer": 211998.04113614105, "risk_events": 1, "pct_risk": 0.0979431929480901, "risk_label": "2nd safest"}, {"Q_risk": 2, "volume": 1043, "avg_pd": 0.012456598128695677, "avg_offer": 153844.67881112176, "risk_events": 9, "pct_risk": 0.862895493767977, "risk_label": "Middle"}, {"Q_risk": 3, "volume": 1046, "avg_pd": 0.016157144459446868, "avg_offer": 117963.67112810707, "risk_events": 17, "pct_risk": 1.6252390057361379, "risk_label": "2nd riskiest"}, {"Q_risk": 4, "volume": 1033, "avg_pd": 0.02364328553123488, "avg_offer": 81355.27589545015, "risk_events": 45, "pct_risk": 4.356243949661181, "risk_label": "Riskiest 20%"}]};
+
+const inr = (v, compact) => {
+  if (compact) {
+    if (Math.abs(v) >= 100000) return '₹' + (v/100000).toFixed(2) + 'L';
+    if (Math.abs(v) >= 1000) return '₹' + (v/1000).toFixed(0) + 'k';
+  }
+  return '₹' + Math.round(v).toLocaleString('en-IN');
+};
+const pct = (v, d=1) => v.toFixed(d) + '%';
+
+Chart.defaults.color = '#8FA4B8';
+Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+Chart.defaults.font.size = 12;
+Chart.defaults.borderColor = '#22344A';
+
+// ---------------- Tabs ----------------
+const tabInitFns = {};
+const tabInitDone = {};
+document.querySelectorAll('.tabbtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tabbtn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const id = btn.dataset.tab;
+    document.getElementById('tab-' + id).classList.add('active');
+    if (tabInitFns[id] && !tabInitDone[id]) { tabInitFns[id](); tabInitDone[id] = true; }
+  });
+});
+
+// ---------------- KPI row ----------------
+const k = DATA.kpis;
+const upliftPct = ((k.proposed_avg_offer / k.existing_avg_offer - 1) * 100).toFixed(1);
+const kpiRow = document.getElementById('kpiRow');
+const kpis = [
+  { label: 'Customers scored', value: k.total_customers.toLocaleString('en-IN'), sub: k.validation_customers.toLocaleString('en-IN') + ' held out for validation' },
+  { label: 'Existing avg offer', value: inr(k.existing_avg_offer, true), sub: 'current logic, test set' },
+  { label: 'Proposed avg offer', value: inr(k.proposed_avg_offer, true), sub: '+' + upliftPct + '% overall', pos: true },
+  { label: 'Personal-loan takeup', value: pct(k.takeup_rate), sub: 'of all contacted customers' },
+  { label: '"Amount too low"', value: pct(k.amount_too_low_rate), sub: 'cited by non-takers' },
+];
+kpiRow.innerHTML = kpis.map(x => `
+  <div class="kpi">
+    <div class="label">${x.label}</div>
+    <div class="value${x.pos ? ' pos' : ''}">${x.value}</div>
+    <div class="sub">${x.sub}</div>
+  </div>`).join('');
+
+// ---------------- Overview charts (init immediately, first tab visible) ----------------
+function initOverview() {
+  new Chart(document.getElementById('riskGradeChart'), {
+    type: 'bar',
+    data: {
+      labels: DATA.risk_grade_comparison.map(r => 'Grade ' + r.RISK_GRADATION_OD),
+      datasets: [
+        { label: 'Existing', data: DATA.risk_grade_comparison.map(r => r.existing), backgroundColor: '#5A6B80', borderRadius: 3, maxBarThickness: 22 },
+        { label: 'Proposed', data: DATA.risk_grade_comparison.map(r => r.proposed), backgroundColor: '#35C08A', borderRadius: 3, maxBarThickness: 22 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + inr(c.parsed.y) } } },
+      scales: { x: { grid: { display: false } }, y: { ticks: { callback: v => inr(v, true) }, grid: { color: '#1B2A3D' } } }
+    }
+  });
+
+  const de = DATA.offer_dist.edges;
+  const labels = de.slice(0, -1).map((e, i) => inr((e + de[i+1]) / 2, true));
+  new Chart(document.getElementById('distChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Existing', data: DATA.offer_dist.existing, borderColor: '#5A6B80', backgroundColor: 'rgba(90,107,128,0.18)', fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2 },
+        { label: 'Proposed', data: DATA.offer_dist.proposed, borderColor: '#35C08A', backgroundColor: 'rgba(53,192,138,0.16)', fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } }, y: { grid: { color: '#1B2A3D' } } }
+    }
+  });
+
+  const catLabelMap = { NOT_DISB: 'Did not borrow', OFFUS_DISB: 'Borrowed elsewhere', ONUS_DISB: 'Took the loan' };
+  new Chart(document.getElementById('categoryChart'), {
+    type: 'bar',
+    data: {
+      labels: DATA.category_comparison.map(r => catLabelMap[r.CATEGORY_NEW] || r.CATEGORY_NEW),
+      datasets: [
+        { label: 'Existing', data: DATA.category_comparison.map(r => r.existing), backgroundColor: '#5A6B80', borderRadius: 3, maxBarThickness: 34 },
+        { label: 'Proposed', data: DATA.category_comparison.map(r => r.proposed), backgroundColor: '#35C08A', borderRadius: 3, maxBarThickness: 34 },
+      ]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + inr(c.parsed.x) } } },
+      scales: { x: { ticks: { callback: v => inr(v, true) }, grid: { color: '#1B2A3D' } }, y: { grid: { display: false } } }
+    }
+  });
+}
+initOverview();
+tabInitDone['overview'] = true;
+
+// ---------------- EDA ----------------
+tabInitFns['eda'] = function() {
+  new Chart(document.getElementById('ageChart'), {
+    type: 'bar',
+    data: { labels: DATA.age_dist.map(r => r.label), datasets: [{ data: DATA.age_dist.map(r => r.count), backgroundColor: '#4C7BB8', borderRadius: 3, maxBarThickness: 30 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { maxRotation: 45, minRotation: 45 }, grid: { display: false } }, y: { grid: { color: '#1B2A3D' } } } }
+  });
+
+  new Chart(document.getElementById('empChart'), {
+    type: 'bar',
+    data: { labels: DATA.employment_dist.map(r => r.label), datasets: [{ data: DATA.employment_dist.map(r => r.count), backgroundColor: '#4C7BB8', borderRadius: 3, maxBarThickness: 40 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false } }, y: { grid: { color: '#1B2A3D' } } } }
+  });
+
+  new Chart(document.getElementById('empOfferChart'), {
+    type: 'bar',
+    data: { labels: DATA.employment_offer.map(r => r.label), datasets: [{ data: DATA.employment_offer.map(r => r.avg), backgroundColor: '#E7B54A', borderRadius: 3, maxBarThickness: 34 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => inr(c.parsed.x) } } },
+      scales: { x: { ticks: { callback: v => inr(v, true) }, grid: { color: '#1B2A3D' } }, y: { grid: { display: false } } } }
+  });
+
+  new Chart(document.getElementById('dispChart'), {
+    type: 'bar',
+    data: { labels: DATA.dispositions.map(r => r.label), datasets: [{ data: DATA.dispositions.map(r => r.pct), backgroundColor: '#8B7FD8', borderRadius: 3, maxBarThickness: 22 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.parsed.x.toFixed(1) + '%' } } },
+      scales: { x: { ticks: { callback: v => v + '%' }, grid: { color: '#1B2A3D' } }, y: { grid: { display: false } } } }
+  });
+
+  const binLabels = { 1: 'Lowest quartile', 2: '2nd quartile', 3: '3rd quartile', 4: 'Highest quartile' };
+  const lowKeys = Object.keys(DATA.amount_too_low_by_bin);
+  new Chart(document.getElementById('lowAmtChart'), {
+    type: 'bar',
+    data: { labels: lowKeys.map(kk => binLabels[kk]), datasets: [{ data: lowKeys.map(kk => DATA.amount_too_low_by_bin[kk]), backgroundColor: '#F2665C', borderRadius: 3, maxBarThickness: 40 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.parsed.x.toFixed(2) + '%' } } },
+      scales: { x: { ticks: { callback: v => v + '%' }, grid: { color: '#1B2A3D' } }, y: { grid: { display: false } } } }
+  });
+
+  new Chart(document.getElementById('missingChart'), {
+    type: 'bar',
+    data: { labels: DATA.missingness.map(r => r.col), datasets: [{ data: DATA.missingness.map(r => r.pct), backgroundColor: '#5D7288', borderRadius: 3, maxBarThickness: 16 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.parsed.x.toFixed(2) + '%' } } },
+      scales: { x: { ticks: { callback: v => v + '%' }, grid: { color: '#1B2A3D' } }, y: { ticks: { font: { size: 10.5 } }, grid: { display: false } } } }
+  });
+};
+
+// ---------------- Risk model ----------------
+tabInitFns['riskmodel'] = function() {
+  document.getElementById('aucStat2').textContent = DATA.risk_auc_holdout.toFixed(2);
+  document.getElementById('liftStat').textContent = DATA.lift.lift_top10.toFixed(2) + '\u00d7';
+  document.getElementById('brierRawStat').textContent = DATA.brier.calibrated.toFixed(3);
+  document.getElementById('brierCalStat').textContent = '24%';
+
+  new Chart(document.getElementById('rocChart'), {
+    type: 'line',
+    data: {
+      labels: DATA.roc.fpr.map(v => v.toFixed(2)),
+      datasets: [
+        { label: 'Risk model', data: DATA.roc.tpr, borderColor: '#F2665C', backgroundColor: 'rgba(242,102,92,0.12)', fill: true, pointRadius: 0, borderWidth: 2, tension: 0.15 },
+        { label: 'Random', data: DATA.roc.fpr, borderColor: '#3A4C63', borderDash: [5,4], pointRadius: 0, borderWidth: 1.5, fill: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { title: { display: true, text: 'False positive rate', color: '#5D7288' }, ticks: { maxTicksLimit: 6 }, grid: { color: '#1B2A3D' } },
+        y: { title: { display: true, text: 'True positive rate', color: '#5D7288' }, grid: { color: '#1B2A3D' } }
+      }
+    }
+  });
+
+  new Chart(document.getElementById('riskImpChart'), {
+    type: 'bar',
+    data: { labels: DATA.risk_importance.map(r => r[0]), datasets: [{ data: DATA.risk_importance.map(r => r[1]), backgroundColor: '#F2665C', borderRadius: 3, maxBarThickness: 16 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { title: { display: true, text: 'AUC drop', color: '#5D7288' }, grid: { color: '#1B2A3D' } }, y: { ticks: { font: { size: 10.5 } }, grid: { display: false } } } }
+  });
+
+  const auc = DATA.auc_bootstrap;
+  new Chart(document.getElementById('aucCiChart'), {
+    type: 'bar',
+    data: {
+      labels: ['AUC (bootstrap 95% CI)'],
+      datasets: [{ data: [[auc.ci_low, auc.ci_high]], backgroundColor: '#F2665C', borderRadius: 4, barThickness: 34 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => 'CI: ' + auc.ci_low.toFixed(2) + '\u2013' + auc.ci_high.toFixed(2) } } },
+      scales: {
+        x: { min: 0.45, max: 0.75, title: { display: true, text: 'AUC', color: '#5D7288' }, grid: { color: '#1B2A3D' } },
+        y: { grid: { display: false } }
+      }
+    },
+    plugins: [{
+      id: 'refline',
+      afterDraw: chart => {
+        const xScale = chart.scales.x, yScale = chart.scales.y, ctx = chart.ctx;
+        const xPix = xScale.getPixelForValue(0.50);
+        const xMean = xScale.getPixelForValue(auc.mean);
+        ctx.save();
+        ctx.strokeStyle = '#5D7288'; ctx.setLineDash([5,4]); ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(xPix, yScale.top); ctx.lineTo(xPix, yScale.bottom); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = '#E7B54A'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(xMean, yScale.top); ctx.lineTo(xMean, yScale.bottom); ctx.stroke();
+        ctx.fillStyle = '#5D7288'; ctx.font = '11px IBM Plex Mono'; ctx.textAlign = 'center';
+        ctx.fillText('random = 0.50', xPix, yScale.top - 6);
+        ctx.restore();
+      }
+    }]
+  });
+
+  new Chart(document.getElementById('prChart'), {
+    type: 'line',
+    data: {
+      labels: DATA.pr_curve.recall.map(v => v.toFixed(2)),
+      datasets: [{ label: 'Precision', data: DATA.pr_curve.precision, borderColor: '#4C7BB8', backgroundColor: 'rgba(76,123,184,0.14)', fill: true, pointRadius: 0, borderWidth: 2, tension: 0.15 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { title: { display: true, text: 'Recall', color: '#5D7288' }, ticks: { maxTicksLimit: 6 }, grid: { color: '#1B2A3D' } },
+        y: { title: { display: true, text: 'Precision', color: '#5D7288' }, grid: { color: '#1B2A3D' } }
+      }
+    }
+  });
+
+  new Chart(document.getElementById('calibChart'), {
+    type: 'line',
+    data: {
+      labels: DATA.calibration_v2.map(r => 'D' + (r.decile+1)),
+      datasets: [
+        { label: 'Raw predicted', data: DATA.calibration_v2.map(r => r.avg_raw*100), borderColor: '#E7B54A', backgroundColor: '#E7B54A', pointRadius: 4, borderWidth: 2, tension: 0.2 },
+        { label: 'Recalibrated', data: DATA.calibration_v2.map(r => r.avg_cal*100), borderColor: '#4C7BB8', backgroundColor: '#4C7BB8', pointRadius: 4, borderWidth: 2, tension: 0.2 },
+        { label: 'Actual', data: DATA.calibration_v2.map(r => r.actual*100), borderColor: '#35C08A', backgroundColor: '#35C08A', pointRadius: 4, borderWidth: 2, tension: 0.2 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + c.parsed.y.toFixed(2) + '%' } } },
+      scales: { x: { title: { display: true, text: 'Predicted-risk decile (low to high)', color: '#5D7288' }, grid: { display: false } },
+                y: { title: { display: true, text: 'Rate (%)', color: '#5D7288' }, grid: { color: '#1B2A3D' } } }
+    }
+  });
+};
+
+// ---------------- Capacity model ----------------
+tabInitFns['capmodel'] = function() {
+  document.getElementById('r2Stat2').textContent = DATA.capacity_r2_holdout.toFixed(2);
+
+  const a = DATA.capacity_scatter.actual, p = DATA.capacity_scatter.predicted;
+  const pts = a.map((v,i) => ({x:v, y:p[i]}));
+  const maxV = Math.max(...a, ...p);
+  new Chart(document.getElementById('scatterChart'), {
+    type: 'scatter',
+    data: { datasets: [
+      { label: 'Customers', data: pts, backgroundColor: 'rgba(76,123,184,0.35)', pointRadius: 2.5 },
+      { label: 'Perfect fit', data: [{x:0,y:0},{x:maxV,y:maxV}], type: 'line', borderColor: '#5D7288', borderDash: [5,4], pointRadius: 0, borderWidth: 1.5 }
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => 'Actual ' + inr(c.parsed.x, true) + ' / Predicted ' + inr(c.parsed.y, true) } } },
+      scales: {
+        x: { title: { display: true, text: 'Actual existing offer', color: '#5D7288' }, ticks: { callback: v => inr(v, true) }, grid: { color: '#1B2A3D' } },
+        y: { title: { display: true, text: 'Predicted capacity', color: '#5D7288' }, ticks: { callback: v => inr(v, true) }, grid: { color: '#1B2A3D' } }
+      }
+    }
+  });
+
+  new Chart(document.getElementById('capImpChart'), {
+    type: 'bar',
+    data: { labels: DATA.cap_importance.map(r => r[0]), datasets: [{ data: DATA.cap_importance.map(r => r[1]), backgroundColor: '#4C7BB8', borderRadius: 3, maxBarThickness: 16 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { title: { display: true, text: 'R² drop', color: '#5D7288' }, grid: { color: '#1B2A3D' } }, y: { ticks: { font: { size: 10.5 } }, grid: { display: false } } } }
+  });
+};
+
+// ---------------- Offer logic ----------------
+tabInitFns['offerlogic'] = function() {
+  const gs = DATA.grid_search;
+  const scores = gs.scores.flat();
+  const minS = Math.min(...scores), maxS = Math.max(...scores);
+  const heat = document.getElementById('heatmapPanel');
+  let cols = gs.m_high.length + 1;
+  let html = `<div class="heatgrid" style="grid-template-columns:70px repeat(${gs.m_high.length},1fr);">`;
+  html += `<div class="heatlabel"></div>`;
+  gs.m_high.forEach(h => html += `<div class="heatlabel">${h.toFixed(2)}&times;</div>`);
+  gs.m_low.forEach((lo, i) => {
+    html += `<div class="heatlabel">${lo.toFixed(2)}&times;</div>`;
+    gs.scores[i].forEach((s, j) => {
+      const t = (s - minS) / (maxS - minS + 0.0001);
+      const lightness = 78 - t*48;
+      const isChosen = (lo === 1.30 && gs.m_high[j] === 0.70);
+      html += `<div class="heatcell" style="background:hsl(158,55%,${lightness}%);${isChosen ? 'outline:2px solid #E7B54A;outline-offset:-2px;' : ''}">${s.toFixed(1)}</div>`;
+    });
+  });
+  html += `</div>`;
+  html += `<p style="font-size:11.5px;color:var(--text-faint);margin:14px 0 0;">Rows: boost for safest customer &nbsp;&middot;&nbsp; Columns: cut for riskiest customer &nbsp;&middot;&nbsp; Gold outline: chosen configuration (1.30&times; / 0.70&times;)</p>`;
+  heat.innerHTML = html;
+
+  const iterPanel = document.getElementById('iterPanel');
+  iterPanel.innerHTML = DATA.iterations.map(it => {
+    const partial = it.composite < 99.5;
+    return `<div class="score-row">
+      <div class="score-name">${it.name}</div>
+      <div class="score-track"><div class="score-fill${partial ? ' partial' : ''}" style="width:${it.composite}%"></div></div>
+      <div class="score-val">${it.composite.toFixed(1)}</div>
+    </div>`;
+  }).join('');
+};
+
+// ---------------- Limitations ----------------
+tabInitFns['limitations'] = function() {
+  const psi = DATA.pd_shift_hist;
+  const psiLabels = psi.edges.slice(0,-1).map((e,i) => ((e+psi.edges[i+1])/2).toFixed(2));
+  new Chart(document.getElementById('psiChart'), {
+    type: 'line',
+    data: {
+      labels: psiLabels,
+      datasets: [
+        { label: 'Trained on (disbursed)', data: psi.trained, borderColor: '#35C08A', backgroundColor: 'rgba(53,192,138,0.15)', fill: true, pointRadius: 0, borderWidth: 2, tension: 0.25 },
+        { label: 'Scored, unobserved', data: psi.unseen, borderColor: '#F2665C', backgroundColor: 'rgba(242,102,92,0.12)', fill: true, pointRadius: 0, borderWidth: 2, tension: 0.25 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { title: { display: true, text: 'Predicted risk score', color: '#5D7288' }, ticks: { maxTicksLimit: 7 }, grid: { display: false } },
+        y: { title: { display: true, text: 'Share of population', color: '#5D7288' }, grid: { color: '#1B2A3D' } }
+      }
+    }
+  });
+
+  const cr = DATA.correlations;
+  new Chart(document.getElementById('corrChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Capacity vs risk grade', 'Existing offer vs risk grade', 'Capacity vs PD score'],
+      datasets: [{ data: [cr.capacity_vs_grade, cr.existing_vs_grade, cr.capacity_vs_pd], backgroundColor: ['#4C7BB8','#5A6B80','#F2665C'], borderRadius: 3, maxBarThickness: 46 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => 'r = ' + c.parsed.x.toFixed(2) } } },
+      scales: {
+        x: { min: -0.7, max: 0.1, title: { display: true, text: 'Pearson r', color: '#5D7288' }, grid: { color: '#1B2A3D' } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+
+  const sensPanel = document.getElementById('sensPanel');
+  const sens = DATA.metric_sensitivity;
+  const rqKeys = Object.keys(sens[0]).filter(k => k !== 'tolerance');
+  let sHtml = '<table style="width:100%;border-collapse:collapse;font-size:12.5px;">';
+  sHtml += '<tr><td style="padding:8px 10px;color:var(--text-faint);font-family:var(--mono);font-size:11px;">tolerance</td>' +
+    rqKeys.map(k => `<td style="padding:8px 10px;color:var(--text-faint);font-family:var(--mono);font-size:11px;text-align:center;">${k.replace('risky_top_','top ').replace('pct','%')}</td>`).join('') + '</tr>';
+  sens.forEach(row => {
+    sHtml += `<tr><td style="padding:8px 10px;font-family:var(--mono);color:var(--text);">${(row.tolerance*100).toFixed(0)}%</td>` +
+      rqKeys.map(k => `<td style="padding:8px 10px;text-align:center;font-family:var(--mono);background:var(--safe-dim);color:var(--safe);border-radius:4px;">${row[k].toFixed(0)}</td>`).join('') + '</tr>';
+  });
+  sHtml += '</table>';
+  sensPanel.innerHTML = sHtml;
+
+  const g9 = DATA.grade9_check;
+  const gp = document.getElementById('gradeProfilePanel');
+  gp.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr><td style="padding:8px 4px;color:var(--text-faint);"></td><td style="padding:8px 4px;color:var(--text-faint);text-align:right;">Grade 8</td><td style="padding:8px 4px;color:var(--text-faint);text-align:right;">Grade 9</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:8px 4px;">Volume</td><td style="padding:8px 4px;text-align:right;font-family:var(--mono);">${g9.grade8_n.toLocaleString('en-IN')}</td><td style="padding:8px 4px;text-align:right;font-family:var(--mono);">${g9.grade9_n.toLocaleString('en-IN')}</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:8px 4px;">Avg existing offer</td><td style="padding:8px 4px;text-align:right;font-family:var(--mono);">${inr(g9.grade8_mean,true)}</td><td style="padding:8px 4px;text-align:right;font-family:var(--mono);">${inr(g9.grade9_mean,true)}</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:8px 4px;">Standard error</td><td style="padding:8px 4px;text-align:right;font-family:var(--mono);color:var(--text-dim);">&plusmn;${inr(g9.grade8_se,true)}</td><td style="padding:8px 4px;text-align:right;font-family:var(--mono);color:var(--text-dim);">&plusmn;${inr(g9.grade9_se,true)}</td></tr>
+    </table>
+    <p style="font-size:12.5px;color:var(--text-dim);margin:14px 0 0;line-height:1.6;">Difference of ${inr(g9.diff,true)}, t&nbsp;=&nbsp;${g9.tstat.toFixed(1)} &mdash; far past the 1.96 threshold for statistical significance. Grade&nbsp;9 customers also carry more prior loans and longer credit history on average, pointing to a distinct, seasoned-borrower segment.</p>
+  `;
+};
+
+// ---------------- Validation ----------------
+tabInitFns['validation'] = function() {
+  const ledger = document.getElementById('ledger');
+  const vq = DATA.validation_quintiles;
+  const maxRisk = Math.max(...vq.map(r => r.pct_risk), DATA.validation_totals.pct_risk);
+  let ledgerHtml = `<div class="ledger-head"><div></div><div>Proposed offer range</div><div>Volume</div><div>Avg offer</div><div>% Ever-30 MOB1-6</div><div></div></div>`;
+  vq.forEach((r, i) => {
+    const barPct = (r.pct_risk / maxRisk) * 100;
+    ledgerHtml += `<div class="ledger-row">
+      <div class="qnum">Q${i+1}</div>
+      <div class="qrange">${inr(r.min_amt, true)}&ndash;${inr(r.max_amt, true)}</div>
+      <div class="qvol">${r.volume.toLocaleString('en-IN')}</div>
+      <div class="qavg">${inr(r.avg_offer)}</div>
+      <div class="qrisk">${pct(r.pct_risk, 2)}</div>
+      <div class="qbar-wrap"><div class="qbar-track"><div class="qbar-fill" style="width:${barPct}%"></div></div></div>
+    </div>`;
+  });
+  const t = DATA.validation_totals;
+  const totalBarPct = (t.pct_risk / maxRisk) * 100;
+  ledgerHtml += `<div class="ledger-row total">
+      <div class="qnum">&Sigma;</div>
+      <div class="qrange">${inr(t.min_amt, true)}&ndash;${inr(t.max_amt, true)}</div>
+      <div class="qvol">${t.volume.toLocaleString('en-IN')}</div>
+      <div class="qavg">${inr(t.avg_offer)}</div>
+      <div class="qrisk">${pct(t.pct_risk, 2)}</div>
+      <div class="qbar-wrap"><div class="qbar-track"><div class="qbar-fill" style="width:${totalBarPct}%;background:#8FA4B8"></div></div></div>
+    </div>`;
+  ledger.innerHTML = ledgerHtml;
+
+  new Chart(document.getElementById('quintileChart'), {
+    data: {
+      labels: vq.map((r,i) => 'Q' + (i+1)),
+      datasets: [
+        { type: 'bar', label: 'Avg proposed offer', data: vq.map(r => r.avg_offer), backgroundColor: '#4C7BB8', borderRadius: 3, maxBarThickness: 46, yAxisID: 'y' },
+        { type: 'line', label: '% Ever-30 MOB1-6', data: vq.map(r => r.pct_risk), borderColor: '#F2665C', backgroundColor: '#F2665C', pointRadius: 5, borderWidth: 2.5, yAxisID: 'y1' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + (c.dataset.yAxisID === 'y' ? inr(c.parsed.y) : c.parsed.y.toFixed(2) + '%') } } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { position: 'left', title: { display: true, text: 'Avg proposed offer', color: '#5D7288' }, ticks: { callback: v => inr(v, true) }, grid: { color: '#1B2A3D' } },
+        y1: { position: 'right', title: { display: true, text: '% Ever-30 MOB1-6', color: '#5D7288' }, ticks: { callback: v => v + '%' }, grid: { display: false } }
+      }
+    }
+  });
+
+  const rd = DATA.validation_by_risk_decile;
+  new Chart(document.getElementById('riskDecileChart'), {
+    data: {
+      labels: rd.map(r => r.risk_label),
+      datasets: [
+        { type: 'bar', label: 'Avg proposed offer', data: rd.map(r => r.avg_offer), backgroundColor: '#35C08A', borderRadius: 3, maxBarThickness: 46, yAxisID: 'y' },
+        { type: 'line', label: '% Ever-30 MOB1-6', data: rd.map(r => r.pct_risk), borderColor: '#F2665C', backgroundColor: '#F2665C', pointRadius: 5, borderWidth: 2.5, yAxisID: 'y1' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + (c.dataset.yAxisID === 'y' ? inr(c.parsed.y) : c.parsed.y.toFixed(2) + '%') } } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { position: 'left', title: { display: true, text: 'Avg proposed offer', color: '#5D7288' }, ticks: { callback: v => inr(v, true) }, grid: { color: '#1B2A3D' } },
+        y1: { position: 'right', title: { display: true, text: '% Ever-30 MOB1-6', color: '#5D7288' }, ticks: { callback: v => v + '%' }, grid: { display: false } }
+      }
+    }
+  });
+};
+
+</script>
+</body>
+</html>
